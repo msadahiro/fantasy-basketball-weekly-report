@@ -1,18 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  writeFileSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
 test("synthetic Yahoo Chaos CLI preserves facts with mocked AI", (t) => {
-  const directory = mkdtempSync(
-    join(tmpdir(), "chaos-report-e2e-"),
-  );
+  const directory = mkdtempSync(join(tmpdir(), "chaos-report-e2e-"));
 
   try {
     const ids = Array.from(
@@ -24,38 +18,34 @@ test("synthetic Yahoo Chaos CLI preserves facts with mocked AI", (t) => {
       "id,name,fg_pct,ft_pct,threes,points,rebounds," +
       "assists,steals,blocks,turnovers";
 
-    const rows = ids.map((id, i) => [
-      id,
-      `Team ${i + 1}`,
-      (0.430 + i * 0.006).toFixed(3),
-      (0.700 + (11 - i) * 0.007).toFixed(3),
-      25 + i * 3,
-      320 + i * 14,
-      112 + i * 5,
-      60 + i * 3,
-      15 + i * 2,
-      12 + i,
-      60 - i * 2,
-    ].join(","));
+    const rows = ids.map((id, i) =>
+      [
+        id,
+        `Team ${i + 1}`,
+        (0.43 + i * 0.006).toFixed(3),
+        (0.7 + (11 - i) * 0.007).toFixed(3),
+        25 + i * 3,
+        320 + i * 14,
+        112 + i * 5,
+        60 + i * 3,
+        15 + i * 2,
+        12 + i,
+        60 - i * 2,
+      ].join(","),
+    );
 
     const csvPath = join(directory, "week1.csv");
     const pairingsPath = join(directory, "pairings.json");
     const mockPath = join(directory, "mock-ai.cjs");
 
-    writeFileSync(
-      csvPath,
-      [header, ...rows].join("\n") + "\n",
-    );
+    writeFileSync(csvPath, [header, ...rows].join("\n") + "\n");
 
     writeFileSync(
       pairingsPath,
       JSON.stringify({
         season: 2026,
         week: 1,
-        pairings: Array.from({ length: 6 }, (_, i) => [
-          ids[i],
-          ids[11 - i],
-        ]),
+        pairings: Array.from({ length: 6 }, (_, i) => [ids[i], ids[11 - i]]),
       }),
     );
 
@@ -117,10 +107,7 @@ globalThis.fetch = async (_url, options) => {
     );
 
     function run(ai: boolean) {
-      const args = [
-        "--import",
-        "tsx",
-      ];
+      const args = ["--import", "tsx"];
 
       if (ai) {
         args.push("--require", mockPath);
@@ -152,17 +139,9 @@ globalThis.fetch = async (_url, options) => {
     const baseline = run(false);
     const ai = run(true);
 
-    assert.equal(
-      baseline.status,
-      0,
-      baseline.stderr || baseline.stdout,
-    );
+    assert.equal(baseline.status, 0, baseline.stderr || baseline.stdout);
 
-    assert.equal(
-      ai.status,
-      0,
-      ai.stderr || ai.stdout,
-    );
+    assert.equal(ai.status, 0, ai.stderr || ai.stdout);
 
     const baselineRows = baseline.stdout
       .split("\n")
@@ -186,9 +165,7 @@ globalThis.fetch = async (_url, options) => {
     }
 
     assert.equal(
-      ai.stdout
-        .split("\n")
-        .filter((line) => /^  _.*_$/.test(line)).length,
+      ai.stdout.split("\n").filter((line) => /^  _.*_$/.test(line)).length,
       6,
     );
 
@@ -197,25 +174,41 @@ globalThis.fetch = async (_url, options) => {
     assert.match(ai.stdout, /Not saved/);
     assert.doesNotMatch(ai.stdout, /\bAll-Play\b/i);
 
-    const baselineWords = Number(
-      baseline.stdout.match(/\((\d+) words\)/)?.[1],
-    );
+    const baselineWords = Number(baseline.stdout.match(/\((\d+) words\)/)?.[1]);
 
-    const aiWords = Number(
-      ai.stdout.match(/\((\d+) words\)/)?.[1],
-    );
+    const aiWords = Number(ai.stdout.match(/\((\d+) words\)/)?.[1]);
 
     assert.ok(Number.isFinite(baselineWords));
     assert.ok(Number.isFinite(aiWords));
     assert.ok(aiWords > baselineWords);
+    assert.ok(
+      baselineWords >= 350 && baselineWords <= 450,
+      `Standard report has ${baselineWords} words`,
+    );
+
+    assert.match(baseline.stdout, /defend the #1 ranking\?/);
+
+    assert.match(ai.stdout, /defend the #1 ranking\?/);
+
+    assert.match(
+      baseline.stdout,
+      /One strong week can change the conversation/,
+    );
+
+    assert.doesNotMatch(
+      ai.stdout,
+      /One strong week can change the conversation/,
+    );
+    assert.ok(
+      aiWords >= 350 && aiWords <= 450,
+      `Expected 350-450 AI report words, received ${aiWords}`,
+    );
 
     t.diagnostic(`Baseline report: ${baselineWords} words`);
     t.diagnostic(`AI report: ${aiWords} words`);
     t.diagnostic(
       `350-450 word target: ${
-        aiWords >= 350 && aiWords <= 450
-          ? "MET"
-          : "NEEDS EDITING"
+        aiWords >= 350 && aiWords <= 450 ? "MET" : "NEEDS EDITING"
       }`,
     );
   } finally {

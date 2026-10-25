@@ -13,3 +13,16 @@ export function assertWhatsAppEditorial(report: string): void {
     );
   }
 }
+
+export function assertAIReportWordCount(words: number): void {
+  if (
+    !Number.isInteger(words) ||
+    words < 350 ||
+    words > 450
+  ) {
+    throw new Error(
+      `AI report has ${words} words; required range is 350-450. ` +
+      "Revise the draft before saving.",
+    );
+  }
+}

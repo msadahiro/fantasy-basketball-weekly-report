@@ -12,7 +12,7 @@ import { loadMatchupPairings } from "../data/matchupPairings.js";
 import { countWords } from "../reports/weeklyShow.js";
 import { saveYahooChaosDraft } from "../reports/yahooChaosSave.js";
 import { calculateYahooRankingHistory } from "../rankings/yahooPowerRankings.js";
-import { assertWhatsAppEditorial } from "../editorial/yahooChaosEditorial.js";
+import { assertWhatsAppEditorial, assertAIReportWordCount } from "../editorial/yahooChaosEditorial.js";
 import { loadApprovedYahooStoryHistory } from "../editorial/yahooStoryHistory.js";
 import { loadPublishedYahooStoryHistory } from "../editorial/publishedYahooStoryHistory.js";
 import { buildWeekOnePreseasonRecap } from "../preseason/preseasonNarrative.js";
@@ -376,9 +376,11 @@ const lines = [
     ? `_${biggestLeader.toUpperCase()} IN THE SPOTLIGHT_`
     : "_THE LEAGUE REFUSES TO PICK A SIDE_",
   "",
-  `Six matchups, twelve teams, and a week of chaos. ` +
-  `The Power Rankings reflect sustained results and recent momentum. ` +
-  `Here are the biggest wins, surprises, and receipts.`,
+  ai
+    ? "Six matchups. Twelve teams. Countless receipts."
+    : "Six matchups, twelve teams, and a week of chaos. " +
+      "The Power Rankings reflect sustained results and recent momentum. " +
+      "Here are the biggest wins, surprises, and receipts.",
   "",
   "⚔️ *MATCHUP MADNESS*",
   ...result.matchups.map(recap),
@@ -408,8 +410,10 @@ const lines = [
   "🔮 *NEXT WEEK'S DRAMA*",
   `Can ${power.rankings[0]!.team} defend the #1 ranking? ` +
   `Can ${bottom.name} answer the critics? ` +
-  "One strong week can change the conversation. " +
-  "Check the box scores, enjoy the chaos, and keep the receipts. 🫡",
+  (ai
+    ? "Nobody escapes the receipts. 🫡"
+    : "One strong week can change the conversation. " +
+      "Check the box scores, enjoy the chaos, and keep the receipts. 🫡"),
   "",
   "⚠️ Power Rankings are provisional until Yahoo data is fully verified.",
   source === "synthetic"
@@ -465,6 +469,10 @@ if (ai) {
 
 assertWhatsAppEditorial(report);
 const words = countWords(report);
+
+if (ai) {
+  assertAIReportWordCount(words);
+}
 
 console.log("\n========== YAHOO CHAOS PREVIEW ==========\n");
 console.log(report);
