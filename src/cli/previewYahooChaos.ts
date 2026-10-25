@@ -1,4 +1,8 @@
 import { readFileSync } from "node:fs";
+import {
+  rewriteBigPicture,
+  createOpenAITextGenerator,
+} from "../editorial/aiChaosWriter.js";
 
 import { parseYahooMatchupCsv } from "../yahoo/yahooMatchupCsv.js";
 import { calculateDisplayedAllPlay } from "../rankings/yahooDisplayedAllPlay.js";
@@ -28,6 +32,7 @@ const [csvPath, pairingsPath, source, ...options] = process.argv.slice(2);
 
 let save = false;
 let saveRevision = false;
+let ai = false;
 let previousPaths: string[] | null = null;
 let periodsPath: string | null = null;
 
@@ -42,6 +47,8 @@ for (let i = 0; i < options.length; i++) {
       throw new Error("Choose one save mode");
     }
     saveRevision = true;
+  } else if (options[i] === "--ai") {
+    ai = true;
   } else if (options[i] === "--periods") {
     if (periodsPath !== null) {
       throw new Error("Duplicate --periods");
@@ -81,7 +88,7 @@ if (
   throw new Error(
     "Usage: npx tsx src/cli/previewYahooChaos.ts " +
     "<yahoo.csv> <pairings.json> synthetic|real " +
-    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision]"
+    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision] [--ai]"
   );
 }
 
@@ -400,7 +407,7 @@ const lines = [
   `Can ${power.rankings[0]!.team} defend the #1 ranking? ` +
   `Can ${bottom.name} answer the critics? ` +
   "One strong week can change the conversation. " +
-  "Set those lineups, check the box scores, and keep the receipts. 🫡",
+  "Check the box scores, enjoy the chaos, and keep the receipts. 🫡",
   "",
   "⚠️ Power Rankings are provisional until Yahoo data is fully verified.",
   source === "synthetic"
@@ -408,7 +415,22 @@ const lines = [
     : "PROVISIONAL — Not approved or sent to WhatsApp.",
 ];
 
-const report = lines.join("\n");
+const baseReport = lines.join("\n");
+const report = ai
+  ? await rewriteBigPicture(
+      {
+        leagueId: league.id,
+        season: week.season,
+        week: week.week,
+        teams: week.teams.map((team) => ({
+          id: team.id,
+          name: team.name,
+        })),
+        report: baseReport,
+      },
+      createOpenAITextGenerator(),
+    )
+  : baseReport;
 assertWhatsAppEditorial(report);
 const words = countWords(report);
 
