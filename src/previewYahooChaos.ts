@@ -10,6 +10,7 @@ import { assertWhatsAppEditorial } from "./yahooChaosEditorial.js";
 import { loadApprovedYahooStoryHistory } from "./yahooStoryHistory.js";
 import { loadPublishedYahooStoryHistory } from "./publishedYahooStoryHistory.js";
 import { buildWeekOnePreseasonRecap } from "./preseasonNarrative.js";
+import { assertReadyYahooPeriodManifest } from "./yahooPeriodManifest.js";
 import {
   parsePreseasonRankings,
   calculatePreseasonMovements,
@@ -28,6 +29,7 @@ const [csvPath, pairingsPath, source, ...options] = process.argv.slice(2);
 let save = false;
 let saveRevision = false;
 let previousPaths: string[] | null = null;
+let periodsPath: string | null = null;
 
 for (let i = 0; i < options.length; i++) {
   if (options[i] === "--save") {
@@ -40,6 +42,18 @@ for (let i = 0; i < options.length; i++) {
       throw new Error("Choose one save mode");
     }
     saveRevision = true;
+  } else if (options[i] === "--periods") {
+    if (periodsPath !== null) {
+      throw new Error("Duplicate --periods");
+    }
+
+    const value = options[++i];
+
+    if (!value || value.startsWith("--")) {
+      throw new Error("--periods requires a JSON file path");
+    }
+
+    periodsPath = value;
   } else if (options[i] === "--previous") {
     if (previousPaths !== null) {
       throw new Error("Duplicate --previous");
@@ -67,7 +81,7 @@ if (
   throw new Error(
     "Usage: npx tsx src/previewYahooChaos.ts " +
     "<yahoo.csv> <pairings.json> synthetic|real " +
-    "[--previous w1.csv,w2.csv] [--save|--save-revision]"
+    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision]"
   );
 }
 
@@ -87,6 +101,28 @@ if (previousFiles.length !== week.week - 1) {
   throw new Error(
     `Week ${week.week} requires ${week.week - 1} previous CSV files ` +
     "for accurate Power Rankings.",
+  );
+}
+
+if (source === "real") {
+  if (!periodsPath) {
+    throw new Error(
+      "Real Yahoo reports require --periods with verified final results",
+    );
+  }
+
+  const manifest: unknown = JSON.parse(
+    readFileSync(periodsPath, "utf8"),
+  );
+
+  assertReadyYahooPeriodManifest(manifest, {
+    leagueId: league.id,
+    season: week.season,
+    week: week.week,
+  });
+} else if (periodsPath !== null) {
+  throw new Error(
+    "--periods is only used for real Yahoo reports",
   );
 }
 
