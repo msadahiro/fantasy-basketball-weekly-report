@@ -1,4 +1,5 @@
 import path from "node:path";
+import { getLeagueConfig } from "./leagueConfig.js";
 
 export interface ReportIdentity {
   draftPath: string;
@@ -6,19 +7,12 @@ export interface ReportIdentity {
   reportId: string;
 }
 
-const leagueNames: Record<string, string> = {
-  "league-of-extraordinary-men": "LEAGUE OF EXTRAORDINARY MEN",
-};
-
 export function assertYahooReportIdentity(
   request: ReportIdentity,
   shareText: string,
 ): void {
-  const leagueName = leagueNames[request.leagueId];
-
-  if (!leagueName) {
-    throw new Error(`Unknown league ID: ${request.leagueId}`);
-  }
+  const leagueName =
+    getLeagueConfig(request.leagueId).displayName;
 
   const reportMatch =
     /^([1-9]\d{3})-week-([1-9]\d*)$/.exec(request.reportId);

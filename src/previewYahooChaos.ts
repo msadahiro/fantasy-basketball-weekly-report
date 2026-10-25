@@ -9,6 +9,18 @@ import { calculateYahooRankingHistory } from "./yahooPowerRankings.js";
 import { assertWhatsAppEditorial } from "./yahooChaosEditorial.js";
 import { loadApprovedYahooStoryHistory } from "./yahooStoryHistory.js";
 import { loadPublishedYahooStoryHistory } from "./publishedYahooStoryHistory.js";
+import { buildWeekOnePreseasonRecap } from "./preseasonNarrative.js";
+import {
+  parsePreseasonRankings,
+  calculatePreseasonMovements,
+} from "./preseasonRankings.js";
+
+import {
+  DEFAULT_LEAGUE_ID,
+  getLeagueConfig,
+} from "./leagueConfig.js";
+
+const league = getLeagueConfig(DEFAULT_LEAGUE_ID);
 import { buildYahooStoryCallback } from "./yahooStoryContinuity.js";
 
 const [csvPath, pairingsPath, source, ...options] = process.argv.slice(2);
@@ -89,7 +101,33 @@ const powerHistory = calculateYahooRankingHistory([
   week,
 ]);
 
-const power = powerHistory.at(-1)!;
+const calculatedPower = powerHistory.at(-1)!;
+
+const preseasonMovements =
+  source === "real" && week.week === 1
+    ? calculatePreseasonMovements(
+        parsePreseasonRankings(
+          readFileSync(
+            `data/private/preseason/${week.season}-${league.id}.json`,
+            "utf8",
+          ),
+          league.id,
+          week.season,
+        ),
+        week.teams,
+        calculatedPower.rankings,
+      )
+    : null;
+
+const power = {
+  ...calculatedPower,
+  rankings: preseasonMovements
+    ? calculatedPower.rankings.map((team) => ({
+        ...team,
+        movement: preseasonMovements.get(team.id)!,
+      }))
+    : calculatedPower.rankings,
+};
 
 const approvedStories = source === "synthetic"
   ? await loadApprovedYahooStoryHistory({
@@ -98,10 +136,18 @@ const approvedStories = source === "synthetic"
       source,
     })
   : await loadPublishedYahooStoryHistory({
-      leagueId: "league-of-extraordinary-men",
+      leagueId: league.id,
       season: week.season,
       beforeWeek: week.week,
     });
+
+const preseasonRecap =
+  source === "real" && week.week === 1 && preseasonMovements
+    ? buildWeekOnePreseasonRecap(
+        power.rankings,
+        preseasonMovements,
+      )
+    : null;
 
 const continuity = buildYahooStoryCallback(
   approvedStories,
@@ -280,7 +326,7 @@ const lines = [
     : "⚠️ MANUAL YAHOO DATA — PROVISIONAL YAHOO DISPLAY — NOT INDEPENDENTLY VERIFIED",
   "",
   "🏀 *THE WEEKLY CHAOS REPORT*",
-  `*LEAGUE OF EXTRAORDINARY MEN — WEEK ${week.week}*`,
+  `*${league.displayName} — WEEK ${week.week}*`,
   biggestLeader
     ? `_${biggestLeader.toUpperCase()} IN THE SPOTLIGHT_`
     : "_THE LEAGUE REFUSES TO PICK A SIDE_",
@@ -293,7 +339,11 @@ const lines = [
   ...result.matchups.map(recap),
   "",
   "📊 *PROVISIONAL POWER RANKINGS*",
-  "_Power Score /100 · movement from last week_",
+  source === "real" && week.week === 1
+    ? "_Power Score /100 · movement vs preseason_"
+    : week.week === 1
+      ? "_Power Score /100 · first-week baseline_"
+      : "_Power Score /100 · movement from last week_",
   ...rankings,
   "",
   "🏆 *THE CHAOS AWARDS*",
@@ -301,6 +351,7 @@ const lines = [
   "",
   "📰 *THE BIG PICTURE*",
   continuity ??
+  preseasonRecap ??
     (`The #1 Power Ranking belongs to ${power.rankings[0]!.team} at ` +
     `${(power.rankings[0]!.powerScore * 100).toFixed(1)}/100, ` +
     `while ${power.rankings.at(-1)!.team} faces the climb from #12. ` +
