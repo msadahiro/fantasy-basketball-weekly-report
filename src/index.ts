@@ -3,7 +3,7 @@ import type { TeamStats } from "./allPlay.js";
 import type { WeeklySnapshot } from "./powerRankings.js";
 import { calculateRankingHistory } from "./history.js";
 import { createReportDraft } from "./reportDraft.js";
-
+import { savePrivateDraft } from "./privateDraft.js";
 interface DemoTeam {
   name: string;
 }
@@ -107,3 +107,9 @@ const draft = createReportDraft(latest);
 
 console.log("\n");
 console.log(draft.content);
+
+if (process.argv.includes("--save-draft")) {
+  const filepath = await savePrivateDraft(draft, latest.week);
+
+  console.log(`\nPrivate draft saved: ${filepath}`);
+}
