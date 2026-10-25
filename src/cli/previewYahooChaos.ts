@@ -332,7 +332,8 @@ if (biggest && biggestLeader) {
 if (
   closest &&
   closestLeader &&
-  closestLeader !== biggestLeader
+  closestLeader !== biggestLeader &&
+  Math.abs(closest.homeWins - closest.awayWins) <= 2
 ) {
   awards.push(
     `🎩 *Escape Artist:* ${closestLeader} — ` +
@@ -364,6 +365,38 @@ const movementStories = [
     : null,
 ].filter((line): line is string => line !== null);
 
+function editorialRecap(
+  matchup: (typeof result.matchups)[number],
+  index: number,
+): string {
+  const [homeId, awayId] = pairings.pairings[index]!;
+  const home = byId.get(homeId)!;
+  const away = byId.get(awayId)!;
+  const leader = leaderName(matchup);
+  const margin = Math.abs(matchup.homeWins - matchup.awayWins);
+
+  let story: string;
+
+  if (matchup.uncertain > 0) {
+    story = "Some categories remain unresolved. The newsroom is withholding its victory parade until the evidence improves.";
+  } else if (!leader) {
+    story = "Neither side has a clear advantage. The league's department of decisive outcomes remains unavailable for comment.";
+  } else if (margin <= 1) {
+    story = `${leader} holds a narrow lead. Even the box scores appear nervous about how this one develops.`;
+  } else if (margin >= 5) {
+    const reactions = [
+      `${leader} leads comfortably. Competitive balance has requested a private meeting with league officials.`,
+      `${leader} is dominating this matchup. The opposition's public relations department has declined to comment.`,
+      `${leader} has built a commanding advantage. The newsroom is investigating whether mercy was ever considered.`,
+    ];
+    story = reactions[index % reactions.length]!;
+  } else {
+    story = `${leader} has the upper hand, although the newsroom has postponed any premature victory celebrations.`;
+  }
+
+  return `• *${home.name} vs ${away.name}* — ${story}`;
+}
+
 const lines = [
   "🔒 *PRIVATE DRAFT — NOT APPROVED*",
   source === "synthetic"
@@ -383,7 +416,7 @@ const lines = [
       "Here are the biggest wins, surprises, and receipts.",
   "",
   "⚔️ *MATCHUP MADNESS*",
-  ...result.matchups.map(recap),
+  ...result.matchups.map(editorialRecap),
   "",
   "📊 *PROVISIONAL POWER RANKINGS*",
   source === "real" && week.week === 1
@@ -448,6 +481,7 @@ if (ai) {
           awayWins: matchup.awayWins,
           ties: matchup.ties,
           uncertain: matchup.uncertain,
+          verifiedRecap: recap(matchup, index),
         };
       }),
       report,

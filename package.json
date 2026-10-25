@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node scripts/runTests.cjs",
     "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preview:chaos": "CHAOS_PREVIEW=1 node --import tsx --test --test-reporter=spec src/reports/yahooChaosCli.e2e.test.ts"
   },
   "repository": {
     "type": "git",

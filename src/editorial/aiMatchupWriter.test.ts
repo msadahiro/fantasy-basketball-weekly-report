@@ -28,6 +28,14 @@ const comments = [
   "This franchise has a complicated relationship with momentum and an excellent publicist.",
 ];
 
+const stories = comments.map((comment, index) => ({
+  matchup: index + 1,
+  headline: `Team ${index * 2 + 1} Challenges Team ${index * 2 + 2}`,
+  paragraph:
+    `Team ${index * 2 + 1} currently leads ` +
+    `Team ${index * 2 + 2} across more categories. ${comment}`,
+}));
+
 const report = [
   "🔒 PRIVATE DRAFT",
   "⚔️ *MATCHUP MADNESS*",
@@ -50,13 +58,8 @@ const input = {
   report,
 };
 
-function response(lines = comments): string {
-  return JSON.stringify({
-    commentary: lines.map((text, i) => ({
-      matchup: i + 1,
-      text,
-    })),
-  });
+function response(items = stories): string {
+  return JSON.stringify({ stories: items });
 }
 
 test("sends all twelve teams and their styles to AI", async () => {
@@ -71,6 +74,10 @@ test("sends all twelve teams and their styles to AI", async () => {
     assert.ok(prompt.includes(`"name": "${team.name}"`));
   }
 
+  assert.match(
+    prompt,
+    /"verifiedRecap": "Team 1 6-3 Team 2/,
+  );
   assert.match(prompt, /deadpan/);
   assert.match(prompt, /investigator/);
   assert.match(prompt, /announcer/);
@@ -79,22 +86,37 @@ test("sends all twelve teams and their styles to AI", async () => {
   assert.match(prompt, /satirical/);
 });
 
-test("adds six comments without modifying factual recaps", async () => {
+test("replaces recap rows with six distinct stories", async () => {
   const result = await rewriteMatchupCommentary(
     input,
     async () => response(),
   );
 
-  for (const line of report.split("\n")) {
-    assert.ok(result.includes(line));
+  const rankingSection = report.slice(
+    report.indexOf("📊 *PROVISIONAL POWER RANKINGS*"),
+  );
+
+  assert.ok(result.includes(rankingSection));
+
+  for (const original of report.split("\n")) {
+    if (original.startsWith("• ")) {
+      assert.ok(
+        !result.includes(original),
+        `Original recap survived: ${original}`,
+      );
+    }
   }
 
-  for (const comment of comments) {
-    assert.ok(result.includes(`_${comment}_`));
+  for (const story of stories) {
+    assert.ok(
+      result.includes(
+        `• *${story.headline}*\n  ${story.paragraph}`,
+      ),
+    );
   }
 
   assert.equal(
-    result.split("\n").filter((line) => line.startsWith("  _")).length,
+    result.split("\n").filter((line) => line.startsWith("• *")).length,
     6,
   );
 });
@@ -108,34 +130,49 @@ test("rejects malformed or incomplete AI output", async () => {
   await assert.rejects(
     rewriteMatchupCommentary(
       input,
-      async () => response(comments.slice(0, 5)),
+      async () => response(stories.slice(0, 5)),
     ),
-    /six matchup comments/,
+    /six matchup stories/,
   );
 });
 
-test("rejects unsupported claims and duplicate commentary", async () => {
+test("rejects unsupported claims and duplicate headlines", async () => {
   for (const badComment of [
-    "The trade committee has gathered to discuss this truly questionable transaction today.",
-    "Management scored 999 points, an achievement unseen in modern fantasy basketball.",
-    "The team clinched a stunning victory and celebrated before the weekend ended.",
-    "The league's All-Play department has officially declared this entire operation ridiculous.",
+    "Management is discussing a trade that would change the league.",
+    "Management scored 999 points in a single category.",
+    "Management clinched the final victory this morning.",
+    "The All-Play committee has officially intervened.",
   ]) {
+    const invalid = [
+      {
+        ...stories[0]!,
+        paragraph:
+          "Team 1 currently leads Team 2 across more categories. " +
+          badComment,
+      },
+      ...stories.slice(1),
+    ];
+
     await assert.rejects(
       rewriteMatchupCommentary(
         input,
-        async () => response([badComment, ...comments.slice(1)]),
+        async () => response(invalid),
       ),
       /failed validation/,
     );
   }
 
+  const duplicated = stories.map((story) => ({
+    ...story,
+    headline: "League Office Orders Another Investigation",
+  }));
+
   await assert.rejects(
     rewriteMatchupCommentary(
       input,
-      async () => response(Array(6).fill(comments[0])),
+      async () => response(duplicated),
     ),
-    /repeated matchup commentary/,
+    /repeated matchup headline/,
   );
 });
 
