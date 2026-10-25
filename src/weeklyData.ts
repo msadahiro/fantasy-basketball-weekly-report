@@ -27,6 +27,14 @@ const teamSchema = z
   .refine((team) => team.ftm <= team.fta, {
     message: "FTM cannot exceed FTA",
     path: ["ftm"],
+  })
+  .refine((team) => team.threes <= team.fgm, {
+    message: "Three-pointers made cannot exceed FGM",
+    path: ["threes"],
+  })
+  .refine((team) => team.points === 2 * team.fgm + team.threes + team.ftm, {
+    message: "Points inconsistent with shooting totals",
+    path: ["points"],
   });
 
 export const weeklyDataSchema = z

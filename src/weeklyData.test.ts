@@ -61,9 +61,16 @@ test("rejects an unfinalized week", () => {
 
 test("preserves zero free throw attempts", () => {
   const data = exampleWeek();
+
   data.teams[0]!.ftm = 0;
   data.teams[0]!.fta = 0;
 
+  // Recalculate points after removing free throws.
+  const team = data.teams[0]!;
+  team.points = 2 * team.fgm + team.threes + team.ftm;
+
   const result = parseWeeklyData(data);
+
   assert.equal(result.teams[0]!.fta, 0);
+  assert.equal(result.teams[0]!.ftm, 0);
 });
