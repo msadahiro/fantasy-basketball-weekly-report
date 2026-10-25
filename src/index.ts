@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import type { TeamStats } from "./allPlay.js";
 import type { WeeklySnapshot } from "./powerRankings.js";
 import { calculateRankingHistory } from "./history.js";
+import { createReportDraft } from "./reportDraft.js";
 
 interface DemoTeam {
   name: string;
@@ -101,3 +102,8 @@ console.log(
 );
 
 console.log("\nDEMO ONLY — All statistics are synthetic.");
+
+const draft = createReportDraft(latest);
+
+console.log("\n");
+console.log(draft.content);
