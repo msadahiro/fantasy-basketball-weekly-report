@@ -1,34 +1,68 @@
 import { readFileSync } from "node:fs";
-import { calculateAllPlay, type TeamStats } from "./allPlay.js";
+import { z } from "zod";
 
-export interface WeeklyData {
-  season: number;
-  week: number;
-  finalized: boolean;
-  teams: TeamStats[];
+const count = z.number().int().nonnegative();
+
+const teamSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    fgm: count,
+    fga: count,
+    ftm: count,
+    fta: count,
+    threes: count,
+    points: count,
+    rebounds: count,
+    assists: count,
+    steals: count,
+    blocks: count,
+    turnovers: count,
+  })
+  .strict()
+  .refine((team) => team.fgm <= team.fga, {
+    message: "FGM cannot exceed FGA",
+    path: ["fgm"],
+  })
+  .refine((team) => team.ftm <= team.fta, {
+    message: "FTM cannot exceed FTA",
+    path: ["ftm"],
+  })
+  .refine((team) => team.threes <= team.fgm, {
+    message: "Three-pointers made cannot exceed FGM",
+    path: ["threes"],
+  })
+  .refine((team) => team.points === 2 * team.fgm + team.threes + team.ftm, {
+    message: "Points inconsistent with shooting totals",
+    path: ["points"],
+  });
+
+export const weeklyDataSchema = z
+  .object({
+    season: z.number().int().positive(),
+    week: z.number().int().positive(),
+    finalized: z.literal(true),
+    teams: z.array(teamSchema).length(12),
+  })
+  .superRefine((data, ctx) => {
+    const ids = data.teams.map((team) => team.id);
+
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Team IDs must be unique",
+        path: ["teams"],
+      });
+    }
+  });
+
+export type WeeklyData = z.infer<typeof weeklyDataSchema>;
+
+export function parseWeeklyData(input: unknown): WeeklyData {
+  return weeklyDataSchema.parse(input);
 }
 
 export function loadWeeklyData(path: string): WeeklyData {
-  const data = JSON.parse(readFileSync(path, "utf8")) as WeeklyData;
-
-  if (!Number.isInteger(data.season)) {
-    throw new Error("Invalid season");
-  }
-
-  if (!Number.isInteger(data.week) || data.week < 1) {
-    throw new Error("Invalid week");
-  }
-
-  if (data.finalized !== true) {
-    throw new Error("Weekly results are not finalized");
-  }
-
-  if (!Array.isArray(data.teams) || data.teams.length !== 12) {
-    throw new Error("Expected exactly 12 teams");
-  }
-
-  // Validates team IDs and category statistics.
-  calculateAllPlay(data.teams);
-
-  return data;
+  const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
+  return parseWeeklyData(raw);
 }
