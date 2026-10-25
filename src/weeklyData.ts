@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { calculateAllPlay, type TeamStats } from "./allPlay";
+import { calculateAllPlay, type TeamStats } from "./allPlay.js";
 
 export interface WeeklyData {
   season: number;

@@ -1,50 +1,103 @@
 import { readFileSync } from "node:fs";
-import { calculateAllPlay, type TeamStats } from "./allPlay";
+import type { TeamStats } from "./allPlay.js";
+import type { WeeklySnapshot } from "./powerRankings.js";
+import { calculateRankingHistory } from "./history.js";
 
-interface LeagueTeam {
+interface DemoTeam {
   name: string;
 }
 
-const league: LeagueTeam[] = JSON.parse(
+const league = JSON.parse(
   readFileSync(new URL("../data/sample-league.json", import.meta.url), "utf8"),
-);
+) as DemoTeam[];
 
 if (league.length !== 12) {
-  throw new Error("Expected exactly 12 league teams.");
+  throw new Error("Demo requires exactly 12 teams.");
 }
 
-// Synthetic data for testing only.
-// Replace with real Yahoo weekly results later.
-const teams: TeamStats[] = league.map((team, i) => ({
-  id: `team-${i + 1}`,
-  name: team.name,
-  fgm: 180 + ((i * 11) % 58),
-  fga: 400 + ((i * 17) % 70),
-  ftm: 90 + ((i * 7) % 30),
-  fta: 120 + ((i * 11) % 40),
-  threes: 35 + ((i * 7) % 32),
-  points: 520 + ((i * 19) % 120),
-  rebounds: 165 + ((i * 23) % 95),
-  assists: 95 + ((i * 13) % 75),
-  steals: 28 + ((i * 5) % 22),
-  blocks: 17 + ((i * 9) % 26),
-  turnovers: 45 + ((i * 7) % 37),
+// Generate three weeks of synthetic basketball statistics.
+function makeTeams(week: number): TeamStats[] {
+  return league.map((team, i) => {
+    const fgm = 180 + ((i * 11 + week * 13) % 58);
+    const fga = 400 + ((i * 17 + week * 7) % 70);
+    const ftm = 90 + ((i * 7 + week * 3) % 30);
+    const fta = 120 + ((i * 11 + week * 5) % 40);
+    const threes = 35 + ((i * 7 + week * 11) % 32);
+
+    return {
+      id: `demo-team-${i + 1}`,
+      name: team.name,
+      fgm,
+      fga,
+      ftm,
+      fta,
+      threes,
+      points: 2 * fgm + threes + ftm,
+      rebounds: 165 + ((i * 23 + week * 19) % 95),
+      assists: 95 + ((i * 13 + week * 17) % 75),
+      steals: 28 + ((i * 5 + week * 7) % 22),
+      blocks: 17 + ((i * 9 + week * 5) % 26),
+      turnovers: 45 + ((i * 7 + week * 11) % 37),
+    };
+  });
+}
+
+const weeks: WeeklySnapshot[] = [1, 2, 3].map((week) => ({
+  week,
+  teams: makeTeams(week),
 }));
 
-const rankings = calculateAllPlay(teams);
+const history = calculateRankingHistory(weeks);
+const latest = history.at(-1)!;
 
 console.log("\n🏀 LEAGUE OF EXTRAORDINARY MEN");
-console.log("ALL-PLAY POWER RANKINGS — DEMO DATA");
+console.log(`WEEK ${latest.week} — POWER RANKINGS`);
 console.log("====================================\n");
 
-rankings.forEach((team, index) => {
-  const rank = String(index + 1).padStart(2, " ");
-  const winRate = (team.categoryWinRate * 100).toFixed(1);
+for (const team of latest.rankings) {
+  const movement =
+    team.movement === null
+      ? "NEW"
+      : team.movement > 0
+        ? `↑${team.movement}`
+        : team.movement < 0
+          ? `↓${Math.abs(team.movement)}`
+          : "—";
 
   console.log(
-    `${rank}. ${team.team} — ${winRate}% | ` +
-      `${team.categoryWins}-${team.categoryLosses}-${team.categoryTies}`,
+    `${String(team.powerRank).padStart(2)}. ${team.team} ` +
+      `| Power ${(team.powerScore * 100).toFixed(1)}/100 ` +
+      `| All-Play #${team.allPlayRank} ` +
+      `| ${movement}`,
   );
-});
+}
 
-console.log("\nDEMO ONLY — Statistics are synthetic.");
+const risers = latest.rankings.filter((team) => (team.movement ?? 0) > 0);
+
+const fallers = latest.rankings.filter((team) => (team.movement ?? 0) < 0);
+
+const maxRise = Math.max(0, ...risers.map((team) => team.movement!));
+
+const maxFall = Math.max(0, ...fallers.map((team) => -team.movement!));
+
+const biggestRisers = risers.filter((team) => team.movement === maxRise);
+
+const biggestFallers = fallers.filter((team) => team.movement === -maxFall);
+
+console.log("\n🏆 WEEKLY AWARDS");
+
+console.log(
+  "Biggest Riser:",
+  biggestRisers.length
+    ? biggestRisers.map((team) => `${team.team} (↑${maxRise})`).join(", ")
+    : "None",
+);
+
+console.log(
+  "Biggest Fall:",
+  biggestFallers.length
+    ? biggestFallers.map((team) => `${team.team} (↓${maxFall})`).join(", ")
+    : "None",
+);
+
+console.log("\nDEMO ONLY — All statistics are synthetic.");
