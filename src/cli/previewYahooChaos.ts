@@ -1,5 +1,10 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { rewriteMatchupCommentary } from "../editorial/aiMatchupWriter.js";
+import {
+  assignEditorialStyles,
+  STYLE_GUIDANCE,
+} from "../editorial/editorialStyles.js";
 
 import {
   rewriteBigPicture,
@@ -37,6 +42,9 @@ let saveRevision = false;
 let ai = false;
 let previousPaths: string[] | null = null;
 let periodsPath: string | null = null;
+let exportEditorialPath: string | null = null;
+let importEditorialPath: string | null = null;
+let draftDirectory: string | null = null;
 
 for (let i = 0; i < options.length; i++) {
   if (options[i] === "--save") {
@@ -51,6 +59,42 @@ for (let i = 0; i < options.length; i++) {
     saveRevision = true;
   } else if (options[i] === "--ai") {
     ai = true;
+  } else if (options[i] === "--export-editorial") {
+    if (exportEditorialPath !== null) {
+      throw new Error("Duplicate --export-editorial");
+    }
+
+    const value = options[++i];
+
+    if (!value || value.startsWith("--")) {
+      throw new Error("--export-editorial requires a JSON file path");
+    }
+
+    exportEditorialPath = value;
+  } else if (options[i] === "--import-editorial") {
+    if (importEditorialPath !== null) {
+      throw new Error("Duplicate --import-editorial");
+    }
+
+    const value = options[++i];
+
+    if (!value || value.startsWith("--")) {
+      throw new Error("--import-editorial requires a JSON file path");
+    }
+
+    importEditorialPath = value;
+  } else if (options[i] === "--draft-dir") {
+    if (draftDirectory !== null) {
+      throw new Error("Duplicate --draft-dir");
+    }
+
+    const value = options[++i];
+
+    if (!value || value.startsWith("--")) {
+      throw new Error("--draft-dir requires a directory");
+    }
+
+    draftDirectory = value;
   } else if (options[i] === "--periods") {
     if (periodsPath !== null) {
       throw new Error("Duplicate --periods");
@@ -83,6 +127,15 @@ for (let i = 0; i < options.length; i++) {
 }
 
 if (
+  exportEditorialPath !== null &&
+  (ai || save || saveRevision)
+) {
+  throw new Error(
+    "--export-editorial cannot be combined with --ai or save modes"
+  );
+}
+
+if (
   !csvPath ||
   !pairingsPath ||
   (source !== "synthetic" && source !== "real")
@@ -90,9 +143,28 @@ if (
   throw new Error(
     "Usage: npx tsx src/cli/previewYahooChaos.ts " +
     "<yahoo.csv> <pairings.json> synthetic|real " +
-    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision] [--ai]"
+    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision] [--ai] [--export-editorial path.json] [--import-editorial response.json] [--draft-dir directory]"
   );
 }
+
+if (
+  importEditorialPath !== null &&
+  (ai || exportEditorialPath !== null)
+) {
+  throw new Error(
+    "--import-editorial cannot be combined with --ai, export, or save modes"
+  );
+}
+
+if (
+  draftDirectory !== null &&
+  !save &&
+  !saveRevision
+) {
+  throw new Error("--draft-dir requires --save or --save-revision");
+}
+
+const editorialMode = ai || importEditorialPath !== null;
 
 const pairings = loadMatchupPairings(pairingsPath);
 
@@ -409,7 +481,7 @@ const lines = [
     ? `_${biggestLeader.toUpperCase()} IN THE SPOTLIGHT_`
     : "_THE LEAGUE REFUSES TO PICK A SIDE_",
   "",
-  ai
+  editorialMode
     ? "Six matchups. Twelve teams. Countless receipts."
     : "Six matchups, twelve teams, and a week of chaos. " +
       "The Power Rankings reflect sustained results and recent momentum. " +
@@ -443,7 +515,7 @@ const lines = [
   "🔮 *NEXT WEEK'S DRAMA*",
   `Can ${power.rankings[0]!.team} defend the #1 ranking? ` +
   `Can ${bottom.name} answer the critics? ` +
-  (ai
+  (editorialMode
     ? "Nobody escapes the receipts. 🫡"
     : "One strong week can change the conversation. " +
       "Check the box scores, enjoy the chaos, and keep the receipts. 🫡"),
@@ -455,10 +527,181 @@ const lines = [
 ];
 
 const baseReport = lines.join("\n");
+
+// Bind editorial writing to the exact deterministic facts.
+const factsHash = createHash("sha256")
+  .update(JSON.stringify({
+    leagueId: league.id,
+    season: week.season,
+    week: week.week,
+    source,
+    teams: week.teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      stats: categories.map((category) => [
+        category.key,
+        team[category.key],
+      ]),
+    })),
+    matchups: result.matchups.map((matchup, index) => ({
+      pairing: pairings.pairings[index],
+      homeWins: matchup.homeWins,
+      awayWins: matchup.awayWins,
+      ties: matchup.ties,
+      uncertain: matchup.uncertain,
+      verifiedRecap: recap(matchup, index),
+    })),
+    rankings,
+    awards,
+  }))
+  .digest("hex");
+
+if (exportEditorialPath !== null) {
+  const assignments = assignEditorialStyles({
+    leagueId: league.id,
+    season: week.season,
+    week: week.week,
+    teamIds: week.teams.map((team) => team.id),
+  });
+
+  const packet = {
+    schemaVersion: 1,
+    kind: "weekly-chaos-editorial-packet",
+    leagueId: league.id,
+    season: week.season,
+    week: week.week,
+    source,
+    status: "PRIVATE DRAFT - PROVISIONAL",
+    factsHash,
+    teams: week.teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      editorialStyle: assignments[team.id],
+      styleGuidance: STYLE_GUIDANCE[assignments[team.id]!],
+    })),
+    matchups: result.matchups.map((matchup, index) => {
+      const [homeId, awayId] = pairings.pairings[index]!;
+      const homeTeam = byId.get(homeId)!;
+      const awayTeam = byId.get(awayId)!;
+
+      return {
+        matchup: index + 1,
+        homeId,
+        awayId,
+        homeName: homeTeam.name,
+        awayName: awayTeam.name,
+        homeWins: matchup.homeWins,
+        awayWins: matchup.awayWins,
+        ties: matchup.ties,
+        uncertain: matchup.uncertain,
+        categoryComparisons: categories.map((category) => {
+          const homeValue = homeTeam[category.key];
+          const awayValue = awayTeam[category.key];
+          const percentage = category.key.endsWith("_pct");
+
+          const homeBetter = category.key === "turnovers"
+            ? homeValue < awayValue
+            : homeValue > awayValue;
+
+          const leader = homeValue === awayValue
+            ? percentage
+              ? "unresolved"
+              : "tie"
+            : homeBetter
+              ? "home"
+              : "away";
+
+          return {
+            key: category.key,
+            label: category.label,
+            homeValue: percentage
+              ? homeValue.toFixed(3)
+              : String(homeValue),
+            awayValue: percentage
+              ? awayValue.toFixed(3)
+              : String(awayValue),
+            leader,
+          };
+        }),
+        verifiedRecap: recap(matchup, index),
+      };
+    }),
+    rankings,
+    awards,
+    report: baseReport,
+  };
+
+  writeFileSync(
+    exportEditorialPath,
+    JSON.stringify(packet, null, 2) + "\n",
+    { flag: "wx" },
+  );
+
+  console.log(
+    `Editorial packet written: ${exportEditorialPath}`
+  );
+
+  process.exit(0);
+}
 let report = baseReport;
 
-if (ai) {
-  const generate = createOpenAITextGenerator();
+if (editorialMode) {
+  const generate = importEditorialPath === null
+    ? createOpenAITextGenerator()
+    : (() => {
+        const imported = JSON.parse(
+          readFileSync(importEditorialPath, "utf8"),
+        ) as {
+          schemaVersion?: unknown;
+          kind?: unknown;
+          leagueId?: unknown;
+          season?: unknown;
+          week?: unknown;
+          source?: unknown;
+          factsHash?: unknown;
+          stories?: unknown;
+          bigPicture?: unknown;
+        };
+
+        if (
+          imported.schemaVersion !== 1 ||
+          imported.kind !== "weekly-chaos-editorial-response" ||
+          imported.leagueId !== league.id ||
+          imported.season !== week.season ||
+          imported.week !== week.week ||
+          imported.source !== source ||
+          imported.factsHash !== factsHash
+        ) {
+          throw new Error(
+            "Editorial response does not match this verified report"
+          );
+        }
+
+        if (
+          !Array.isArray(imported.stories) ||
+          imported.stories.length !== 6 ||
+          typeof imported.bigPicture !== "string"
+        ) {
+          throw new Error(
+            "Editorial response requires six stories and a Big Picture"
+          );
+        }
+
+        const responses = [
+          JSON.stringify({ stories: imported.stories }),
+          imported.bigPicture,
+        ];
+
+        let call = 0;
+
+        return async (_prompt: string): Promise<string> => {
+          if (call >= responses.length) {
+            throw new Error("Unexpected editorial generation request");
+          }
+
+          return responses[call++]!;
+        };
+      })();
 
   const editorialTeams = week.teams.map((team) => ({
     id: team.id,
@@ -504,7 +747,7 @@ if (ai) {
 assertWhatsAppEditorial(report);
 const words = countWords(report);
 
-if (ai) {
+if (editorialMode) {
   assertAIReportWordCount(words);
 }
 
@@ -518,7 +761,7 @@ if (save || saveRevision) {
     week.season,
     week.week,
     source,
-    "data/private/reports",
+    draftDirectory ?? "data/private/reports",
     saveRevision,
   );
 

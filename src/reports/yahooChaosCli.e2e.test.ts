@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -205,7 +205,7 @@ globalThis.fetch = async (_url, options) => {
 `,
     );
 
-    function run(ai: boolean) {
+    function run(ai: boolean, extraOptions: string[] = []) {
       const args = ["--import", "tsx"];
 
       if (ai) {
@@ -223,14 +223,16 @@ globalThis.fetch = async (_url, options) => {
         args.push("--ai");
       }
 
+      args.push(...extraOptions);
+
       return spawnSync(process.execPath, args, {
         cwd: process.cwd(),
         encoding: "utf8",
         timeout: 20000,
         env: {
           ...process.env,
-          OPENAI_API_KEY: "mock-only-key",
-          OPENAI_MODEL: "mock-model",
+          OPENAI_API_KEY: ai ? "mock-only-key" : "",
+          OPENAI_MODEL: ai ? "mock-model" : "",
         },
       });
     }
@@ -241,6 +243,230 @@ globalThis.fetch = async (_url, options) => {
     assert.equal(baseline.status, 0, baseline.stderr || baseline.stdout);
 
     assert.equal(ai.status, 0, ai.stderr || ai.stdout);
+
+    // Export verified editorial facts without calling an AI service.
+    const packetPath = join(directory, "editorial-packet.json");
+    const responsePath = join(directory, "editorial-response.json");
+
+    const exported = run(false, [
+      "--export-editorial",
+      packetPath,
+    ]);
+
+    assert.equal(
+      exported.status,
+      0,
+      exported.stderr || exported.stdout,
+    );
+
+    const packet = JSON.parse(
+      readFileSync(packetPath, "utf8"),
+    ) as {
+      schemaVersion: number;
+      kind: string;
+      leagueId: string;
+      season: number;
+      week: number;
+      source: string;
+      factsHash: string;
+      matchups: Array<{
+        homeWins: number;
+        awayWins: number;
+        ties: number;
+        categoryComparisons: Array<{
+          key: string;
+          homeValue: string;
+          awayValue: string;
+          leader: string;
+        }>;
+      }>;
+    };
+
+    assert.equal(packet.schemaVersion, 1);
+    assert.equal(packet.kind, "weekly-chaos-editorial-packet");
+    assert.equal(packet.source, "synthetic");
+    assert.equal(packet.season, 2026);
+    assert.equal(packet.week, 1);
+    assert.match(packet.factsHash, /^[a-f0-9]{64}$/);
+    assert.equal(packet.matchups.length, 6);
+
+    const expectedCategories = [
+      "fg_pct", "ft_pct", "threes", "points",
+      "rebounds", "assists", "steals", "blocks",
+      "turnovers",
+    ];
+
+    for (const matchup of packet.matchups) {
+      assert.deepEqual(
+        matchup.categoryComparisons.map((item) => item.key),
+        expectedCategories,
+      );
+    }
+
+    assert.equal(
+      packet.matchups[0]!.categoryComparisons[0]!.homeValue,
+      "0.496",
+    );
+
+    assert.equal(
+      packet.matchups[1]!.categoryComparisons[8]!.leader,
+      "tie",
+    );
+
+    const expectedScores = [
+      [5, 4, 0],
+      [4, 4, 1],
+      [1, 8, 0],
+      [3, 6, 0],
+      [2, 7, 0],
+      [6, 3, 0],
+    ];
+
+    for (let i = 0; i < 6; i++) {
+      const matchup = packet.matchups[i]!;
+
+      assert.deepEqual(
+        [matchup.homeWins, matchup.awayWins, matchup.ties],
+        expectedScores[i],
+      );
+    }
+
+    // Simulate a ChatGPT-authored editorial response.
+    const editorialResponse = {
+      schemaVersion: 1,
+      kind: "weekly-chaos-editorial-response",
+      leagueId: packet.leagueId,
+      season: packet.season,
+      week: packet.week,
+      source: packet.source,
+      factsHash: packet.factsHash,
+      stories: stories.map((story, index) => ({
+        matchup: index + 1,
+        ...story,
+      })),
+      bigPicture,
+    };
+
+    writeFileSync(
+      responsePath,
+      JSON.stringify(editorialResponse, null, 2),
+    );
+
+    // Import must work without OPENAI_API_KEY or OPENAI_MODEL.
+    const imported = run(false, [
+      "--import-editorial",
+      responsePath,
+    ]);
+
+    assert.equal(
+      imported.status,
+      0,
+      imported.stderr || imported.stdout,
+    );
+
+    // Both editorial paths should produce the same report.
+    assert.equal(imported.stdout, ai.stdout);
+
+    // Save imported writing privately in an isolated directory.
+    const draftDirectory = join(directory, "private-drafts");
+    const draftName =
+      "demo-yahoo-power-chaos-season-2026-week-1.txt";
+    const draftPath = join(draftDirectory, draftName);
+
+    const saveOptions = [
+      "--import-editorial",
+      responsePath,
+      "--save",
+      "--draft-dir",
+      draftDirectory,
+    ];
+
+    const saved = run(false, saveOptions);
+
+    assert.equal(
+      saved.status,
+      0,
+      saved.stderr || saved.stdout,
+    );
+
+    const savedReport = readFileSync(draftPath, "utf8");
+
+    assert.match(savedReport, /PRIVATE DRAFT/);
+    assert.match(savedReport, /DEMO ONLY/);
+    assert.ok(savedReport.includes(stories[0]!.headline));
+    assert.match(saved.stdout, /Not approved or published/);
+
+    // Never silently overwrite an existing draft.
+    const duplicateSave = run(false, saveOptions);
+
+    assert.notEqual(duplicateSave.status, 0);
+    assert.match(duplicateSave.stderr, /EEXIST/);
+    assert.deepEqual(readdirSync(draftDirectory), [draftName]);
+
+    // Explicit revision mode creates a separate private draft.
+    const revision = run(false, [
+      "--import-editorial",
+      responsePath,
+      "--save-revision",
+      "--draft-dir",
+      draftDirectory,
+    ]);
+
+    assert.equal(
+      revision.status,
+      0,
+      revision.stderr || revision.stdout,
+    );
+
+    const revisionName =
+      "demo-yahoo-power-chaos-season-2026-week-1-v2.txt";
+
+    assert.deepEqual(
+      readdirSync(draftDirectory).sort(),
+      [draftName, revisionName].sort(),
+    );
+
+    assert.equal(
+      readFileSync(join(draftDirectory, revisionName), "utf8"),
+      savedReport,
+    );
+
+    assert.match(revision.stdout, /Not approved or published/);
+
+    // Reject editorial content with the wrong factual fingerprint.
+    const stalePath = join(directory, "stale-editorial.json");
+
+    writeFileSync(
+      stalePath,
+      JSON.stringify({
+        ...editorialResponse,
+        factsHash: "0".repeat(64),
+      }),
+    );
+
+    const stale = run(false, [
+      "--import-editorial",
+      stalePath,
+    ]);
+
+    assert.notEqual(stale.status, 0);
+    assert.match(
+      stale.stderr,
+      /Editorial response does not match this verified report/,
+    );
+
+    // Import cannot run alongside automatic AI generation.
+    const conflictingModes = run(false, [
+      "--import-editorial",
+      responsePath,
+      "--ai",
+    ]);
+
+    assert.notEqual(conflictingModes.status, 0);
+    assert.match(
+      conflictingModes.stderr,
+      /cannot be combined/,
+    );
 
     const baselineRows = baseline.stdout
       .split("\n")
