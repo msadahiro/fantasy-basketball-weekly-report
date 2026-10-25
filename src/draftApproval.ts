@@ -1,12 +1,18 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 
-export type DraftApprovalStatus = "unapproved" | "approved" | "modified";
+export type DraftApprovalStatus =
+  | "unapproved"
+  | "approved"
+  | "modified"
+  | "rejected";
 
 interface ApprovalRecord {
   version: 1;
   sha256: string;
   approvedAt: string;
+  decision?: "approved" | "rejected";
+  decidedAt?: string;
 }
 
 export function hashDraft(content: string): string {
@@ -47,6 +53,15 @@ export async function getDraftApprovalStatus(
     throw new Error("Invalid draft approval record");
   }
 
+  const decision =
+    "decision" in record && typeof record.decision === "string"
+      ? record.decision
+      : "approved";
+
+  if (decision === "rejected") {
+    return "rejected";
+  }
+
   return record.sha256 === hashDraft(content) ? "approved" : "modified";
 }
 
@@ -56,8 +71,21 @@ export async function approvePrivateDraft(
 ): Promise<void> {
   const content = await readFile(filepath, "utf8");
 
-  if (!content.includes("PRIVATE DRAFT") || !content.includes("DEMO ONLY")) {
-    throw new Error("Not a private demo draft");
+  const isDemo = content.includes("DEMO ONLY");
+
+  const isProvisionalMatchup =
+    content.includes("PROVISIONAL MATCHUP — NOT FINAL") &&
+    content.includes("MANUALLY ENTERED — NOT INDEPENDENTLY VERIFIED");
+
+  const isFinalizedWeeklyShow = content.includes(
+    "REAL LEAGUE RESULTS — finalized weekly snapshot",
+  );
+
+  if (
+    !content.includes("PRIVATE DRAFT") ||
+    (!isDemo && !isProvisionalMatchup && !isFinalizedWeeklyShow)
+  ) {
+    throw new Error("Not an eligible private draft");
   }
 
   const currentHash = hashDraft(content);
@@ -66,10 +94,34 @@ export async function approvePrivateDraft(
     throw new Error("Draft changed since preview");
   }
 
+  const now = new Date().toISOString();
+
   const record: ApprovalRecord = {
     version: 1,
     sha256: currentHash,
-    approvedAt: new Date().toISOString(),
+    approvedAt: now,
+    decision: "approved",
+    decidedAt: now,
+  };
+
+  await writeFile(approvalPath(filepath), JSON.stringify(record, null, 2), {
+    mode: 0o600,
+  });
+}
+
+export async function rejectPrivateDraft(filepath: string): Promise<void> {
+  const content = await readFile(filepath, "utf8");
+
+  const now = new Date().toISOString();
+
+  // Recording a rejection revokes any earlier approval: the stored
+  // decision becomes "rejected" regardless of whether the hash matches.
+  const record: ApprovalRecord = {
+    version: 1,
+    sha256: hashDraft(content),
+    approvedAt: now,
+    decision: "rejected",
+    decidedAt: now,
   };
 
   await writeFile(approvalPath(filepath), JSON.stringify(record, null, 2), {

@@ -72,3 +72,56 @@ export function formatStoryline(
 
   return [heading, facts, commentary[style][kind]].join("\n");
 }
+
+export interface MatchupFacts {
+  firstTeam: string;
+  secondTeam: string;
+  firstLeads: number;
+  secondLeads: number;
+  ties: number;
+}
+
+export function formatMatchupCommentary(
+  facts: MatchupFacts,
+  style: WriterStyle = "playful",
+): string {
+  const { firstTeam, secondTeam, firstLeads, secondLeads, ties } = facts;
+
+  if (firstLeads === secondLeads) {
+    return (
+      `${firstTeam} and ${secondTeam} are level in category leads ` +
+      `(${firstLeads} each, ${ties} tied). ` +
+      "Nobody gets a victory lap just yet."
+    );
+  }
+
+  const leader = firstLeads > secondLeads ? firstTeam : secondTeam;
+
+  const opponent = firstLeads > secondLeads ? secondTeam : firstTeam;
+
+  const score =
+    `${Math.max(firstLeads, secondLeads)}–` +
+    `${Math.min(firstLeads, secondLeads)}`;
+
+  switch (style) {
+    case "professional":
+      return (
+        `${leader} currently leads ${opponent} ${score} in categories. ` +
+        "These are provisional results, not a finalized matchup."
+      );
+
+    case "playful":
+      return (
+        `${leader} is up ${score} on the category scoreboard. ` +
+        `${opponent} still has time to respond, so nobody ` +
+        "should start the victory parade yet."
+      );
+
+    case "roast":
+      return (
+        `${leader} leads ${score}. ${opponent} has some catching up ` +
+        "to do, but celebrating before the week ends is how " +
+        "fantasy basketball creates its best comeback stories."
+      );
+  }
+}
