@@ -1,5 +1,5 @@
 import type { HistoricalRanking, WeeklyRankingHistory } from "./history.js";
-
+import { detectStorylines, type Storyline } from "./storylines.js";
 export interface ReportDraft {
   status: "draft";
   source: "synthetic";
@@ -19,6 +19,42 @@ function formatAward(teams: HistoricalRanking[], movement: number): string {
   return teams
     .map((team) => `${team.team} (${Math.abs(movement)} spots)`)
     .join(", ");
+}
+
+function formatStoryline(story: Storyline): string {
+  const weeklyRank = story.allPlayRank;
+  const powerRank = story.powerRank;
+  const movement = story.movement ?? 0;
+
+  switch (story.kind) {
+    case "biggest_riser":
+      return (
+        `🚀 *The Climb — ${story.team}*\n` +
+        `Up ${movement} spots to #${powerRank} in the Power Rankings. ` +
+        `A #${weeklyRank} weekly All-Play finish gives this team something to celebrate.`
+      );
+
+    case "biggest_fall":
+      return (
+        `📉 *The Freefall — ${story.team}*\n` +
+        `Down ${Math.abs(movement)} spots to #${powerRank}. ` +
+        `Their weekly All-Play finish was #${weeklyRank}.`
+      );
+
+    case "weekly_overperformer":
+      return (
+        `🔥 *Above Expectations — ${story.team}*\n` +
+        `Power ranked #${powerRank}, but finished #${weeklyRank} in weekly All-Play. ` +
+        `That's ${powerRank - weeklyRank} places above their overall ranking.`
+      );
+
+    case "weekly_underperformer":
+      return (
+        `🥶 *A Rough Week — ${story.team}*\n` +
+        `Power ranked #${powerRank}, but finished #${weeklyRank} in weekly All-Play. ` +
+        `That's ${weeklyRank - powerRank} places below their overall ranking.`
+      );
+  }
 }
 
 export function createReportDraft(snapshot: WeeklyRankingHistory): ReportDraft {
@@ -83,6 +119,30 @@ export function createReportDraft(snapshot: WeeklyRankingHistory): ReportDraft {
     `🚀 Biggest Riser: ${formatAward(risers, maxRise)}`,
     `📉 Biggest Fall: ${formatAward(fallers, maxFall)}`,
     "",
+  );
+
+  // Detect and select up to four distinct teams.
+  const selectedStories: Storyline[] = [];
+  const featuredTeams = new Set<string>();
+
+  for (const story of detectStorylines(snapshot)) {
+    if (featuredTeams.has(story.teamId)) continue;
+
+    selectedStories.push(story);
+    featuredTeams.add(story.teamId);
+
+    if (selectedStories.length === 4) break;
+  }
+
+  if (selectedStories.length > 0) {
+    lines.push("📰 *WEEKLY STORYLINES*", "");
+
+    for (const story of selectedStories) {
+      lines.push(formatStoryline(story), "");
+    }
+  }
+
+  lines.push(
     "Power Rankings reflect season-long and recent All-Play performance.",
     "",
     "DEMO ONLY — Nothing has been sent to WhatsApp.",
