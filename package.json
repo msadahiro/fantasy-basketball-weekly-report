@@ -1,0 +1,26 @@
+{
+  "name": "fantasy-basketball-weekly-report",
+  "version": "1.0.0",
+  "description": "An automated fantasy basketball analytics and reporting project for a private 12-team Yahoo Fantasy Basketball league, **League of Extraordinary Men**.",
+  "main": "index.js",
+  "scripts": {
+    "test": "tsx --test src/allPlay.test.ts",
+    "dev": "tsx src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msadahiro/fantasy-basketball-weekly-report.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/msadahiro/fantasy-basketball-weekly-report/issues"
+  },
+  "homepage": "https://github.com/msadahiro/fantasy-basketball-weekly-report#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
