@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { rewriteMatchupCommentary } from "../editorial/aiMatchupWriter.js";
+
 import {
   rewriteBigPicture,
   createOpenAITextGenerator,
@@ -416,21 +418,51 @@ const lines = [
 ];
 
 const baseReport = lines.join("\n");
-const report = ai
-  ? await rewriteBigPicture(
-      {
-        leagueId: league.id,
-        season: week.season,
-        week: week.week,
-        teams: week.teams.map((team) => ({
-          id: team.id,
-          name: team.name,
-        })),
-        report: baseReport,
-      },
-      createOpenAITextGenerator(),
-    )
-  : baseReport;
+let report = baseReport;
+
+if (ai) {
+  const generate = createOpenAITextGenerator();
+
+  const editorialTeams = week.teams.map((team) => ({
+    id: team.id,
+    name: team.name,
+  }));
+
+  report = await rewriteMatchupCommentary(
+    {
+      leagueId: league.id,
+      season: week.season,
+      week: week.week,
+      teams: editorialTeams,
+      matchups: result.matchups.map((matchup, index) => {
+        const [homeId, awayId] = pairings.pairings[index]!;
+
+        return {
+          homeId,
+          awayId,
+          homeWins: matchup.homeWins,
+          awayWins: matchup.awayWins,
+          ties: matchup.ties,
+          uncertain: matchup.uncertain,
+        };
+      }),
+      report,
+    },
+    generate,
+  );
+
+  report = await rewriteBigPicture(
+    {
+      leagueId: league.id,
+      season: week.season,
+      week: week.week,
+      teams: editorialTeams,
+      report,
+    },
+    generate,
+  );
+}
+
 assertWhatsAppEditorial(report);
 const words = countWords(report);
 
