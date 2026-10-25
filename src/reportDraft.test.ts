@@ -64,3 +64,30 @@ test("rejects incomplete rankings", () => {
     /Invalid weekly ranking snapshot/,
   );
 });
+
+test("includes fact-based storylines in the private report", () => {
+  const draft = createReportDraft(sampleHistory());
+
+  assert.match(draft.content, /WEEKLY STORYLINES/);
+  assert.match(draft.content, /The Climb — Demo Team 1/);
+  assert.match(draft.content, /The Freefall — Demo Team 3/);
+  assert.match(draft.content, /Up 2 spots/);
+  assert.match(draft.content, /Down 2 spots/);
+
+  assert.equal(draft.status, "draft");
+  assert.equal(draft.source, "synthetic");
+});
+
+test("omits the storyline section when nothing qualifies", () => {
+  const history = sampleHistory();
+
+  for (const team of history.rankings) {
+    team.movement = 0;
+    team.allPlayRank = team.powerRank;
+  }
+
+  const draft = createReportDraft(history);
+
+  assert.doesNotMatch(draft.content, /WEEKLY STORYLINES/);
+  assert.match(draft.content, /PRIVATE DRAFT/);
+});
