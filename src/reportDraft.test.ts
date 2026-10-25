@@ -91,3 +91,23 @@ test("omits the storyline section when nothing qualifies", () => {
   assert.doesNotMatch(draft.content, /WEEKLY STORYLINES/);
   assert.match(draft.content, /PRIVATE DRAFT/);
 });
+
+test("supports selectable sportswriter styles", () => {
+  const history = sampleHistory();
+
+  const professional = createReportDraft(history, {
+    style: "professional",
+  });
+
+  const roast = createReportDraft(history, {
+    style: "roast",
+  });
+
+  assert.match(professional.content, /The Climb/);
+  assert.match(roast.content, /button labeled 'up'/);
+
+  assert.notEqual(professional.content, roast.content);
+
+  assert.equal(professional.status, "draft");
+  assert.equal(roast.status, "draft");
+});
