@@ -81,9 +81,19 @@ export async function approvePrivateDraft(
     "REAL LEAGUE RESULTS — finalized weekly snapshot",
   );
 
+  const isProvisionalYahoo = content.includes(
+    "PROVISIONAL YAHOO DISPLAY — NOT INDEPENDENTLY VERIFIED",
+  ) && (
+    content.includes("PROVISIONAL WEEKLY ALL-PLAY") ||
+    content.includes("PROVISIONAL POWER RANKINGS")
+  );
+
   if (
     !content.includes("PRIVATE DRAFT") ||
-    (!isDemo && !isProvisionalMatchup && !isFinalizedWeeklyShow)
+    (!isDemo &&
+      !isProvisionalMatchup &&
+      !isFinalizedWeeklyShow &&
+      !isProvisionalYahoo)
   ) {
     throw new Error("Not an eligible private draft");
   }

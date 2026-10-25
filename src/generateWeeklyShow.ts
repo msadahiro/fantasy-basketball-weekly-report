@@ -4,6 +4,10 @@ import type { TeamStats } from "./allPlay.js";
 import type { WeeklySnapshot } from "./powerRankings.js";
 import { loadWeeklyData, parseWeeklyData } from "./weeklyData.js";
 import { loadMatchupPairings } from "./matchupPairings.js";
+import {
+  loadOfficialMatchups,
+  verifyOfficialMatchups,
+} from "./officialYahoo.js";
 import { generateWeeklyShow } from "./weeklyShow.js";
 import { saveWeeklyShow } from "./weeklyShowSave.js";
 import type { WriterStyle } from "./sportswriter.js";
@@ -12,7 +16,8 @@ function usage(): never {
   throw new Error(
     "Usage: npx tsx src/generateWeeklyShow.ts <week.json> <pairings.json> " +
       "[--source synthetic|real] [--style professional|playful|roast] " +
-      "[--previous w1.json,w2.json] [--save]",
+      "[--previous w1.json,w2.json] " +
+      "[--official-matchups yahoo.json] [--save]",
   );
 }
 
@@ -62,6 +67,40 @@ const show = generateWeeklyShow({
   source,
   style,
 });
+
+const officialPath = parseFlag("--official-matchups");
+
+if (
+  process.argv.includes("--official-matchups") &&
+  !officialPath
+) {
+  usage();
+}
+
+if (officialPath) {
+  if (source !== "real") {
+    throw new Error(
+      "Official Yahoo verification requires --source real",
+    );
+  }
+
+  const official = loadOfficialMatchups(officialPath);
+
+  if (
+    official.season !== week.season ||
+    official.week !== week.week
+  ) {
+    throw new Error(
+      "Official Yahoo season/week does not match report",
+    );
+  }
+
+  verifyOfficialMatchups(official, show.matchups);
+
+  console.log(
+    "Verified: all six calculated matchups match Yahoo.",
+  );
+}
 
 console.log("\n================ WHATSAPP REPORT ================\n");
 console.log(show.whatsapp);
