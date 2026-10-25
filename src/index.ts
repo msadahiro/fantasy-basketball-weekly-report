@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import type { TeamStats } from "./allPlay.js";
-import type { WeeklySnapshot } from "./powerRankings.js";
-import { calculateRankingHistory } from "./history.js";
-import { createReportDraft } from "./reportDraft.js";
-import { savePrivateDraft } from "./privateDraft.js";
+import type { TeamStats } from "./rankings/allPlay.js";
+import type { WeeklySnapshot } from "./rankings/powerRankings.js";
+import { calculateRankingHistory } from "./data/history.js";
+import { createReportDraft } from "./reports/reportDraft.js";
+import { savePrivateDraft } from "./publication/privateDraft.js";
 interface DemoTeam {
   name: string;
 }

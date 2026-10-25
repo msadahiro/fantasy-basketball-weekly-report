@@ -1,4 +1,4 @@
-import type { TeamStats } from "../allPlay.js";
+import type { TeamStats } from "../rankings/allPlay.js";
 
 export const statFields = [
   "fgm",

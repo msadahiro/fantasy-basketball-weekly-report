@@ -1,4 +1,4 @@
-import { calculateWeeklyResults } from "../weeklyResults.js";
+import { calculateWeeklyResults } from "../data/weeklyResults.js";
 
 import {
   mapTeamStats,
