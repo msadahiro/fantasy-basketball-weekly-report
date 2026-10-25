@@ -5,19 +5,57 @@ import { calculateDisplayedAllPlay } from "./yahooDisplayedAllPlay.js";
 import { loadMatchupPairings } from "./matchupPairings.js";
 import { countWords } from "./weeklyShow.js";
 import { saveYahooChaosDraft } from "./yahooChaosSave.js";
+import { calculateYahooRankingHistory } from "./yahooPowerRankings.js";
+import { assertWhatsAppEditorial } from "./yahooChaosEditorial.js";
+import { loadApprovedYahooStoryHistory } from "./yahooStoryHistory.js";
+import { loadPublishedYahooStoryHistory } from "./publishedYahooStoryHistory.js";
+import { buildYahooStoryCallback } from "./yahooStoryContinuity.js";
 
 const [csvPath, pairingsPath, source, ...options] = process.argv.slice(2);
-const save = options.length === 1 && options[0] === "--save";
+
+let save = false;
+let saveRevision = false;
+let previousPaths: string[] | null = null;
+
+for (let i = 0; i < options.length; i++) {
+  if (options[i] === "--save") {
+    if (save || saveRevision) {
+      throw new Error("Choose one save mode");
+    }
+    save = true;
+  } else if (options[i] === "--save-revision") {
+    if (save || saveRevision) {
+      throw new Error("Choose one save mode");
+    }
+    saveRevision = true;
+  } else if (options[i] === "--previous") {
+    if (previousPaths !== null) {
+      throw new Error("Duplicate --previous");
+    }
+
+    const value = options[++i];
+    if (!value || value.startsWith("--")) {
+      throw new Error("--previous requires comma-separated CSV paths");
+    }
+
+    previousPaths = value.split(",");
+    if (previousPaths.some((filepath) => !filepath)) {
+      throw new Error("Empty previous-week CSV path");
+    }
+  } else {
+    throw new Error(`Unknown option: ${options[i]}`);
+  }
+}
 
 if (
   !csvPath ||
   !pairingsPath ||
-  (source !== "synthetic" && source !== "real") ||
-  (options.length > 0 && !save)
+  (source !== "synthetic" && source !== "real")
 ) {
   throw new Error(
     "Usage: npx tsx src/previewYahooChaos.ts " +
-    "<yahoo.csv> <pairings.json> synthetic|real [--save]"
+    "<yahoo.csv> <pairings.json> synthetic|real " +
+    "[--previous w1.csv,w2.csv] [--save|--save-revision]"
   );
 }
 
@@ -30,6 +68,47 @@ const week = parseYahooMatchupCsv(
 );
 
 const result = calculateDisplayedAllPlay(week, pairings);
+
+const previousFiles = previousPaths ?? [];
+
+if (previousFiles.length !== week.week - 1) {
+  throw new Error(
+    `Week ${week.week} requires ${week.week - 1} previous CSV files ` +
+    "for accurate Power Rankings.",
+  );
+}
+
+const powerHistory = calculateYahooRankingHistory([
+  ...previousFiles.map((filepath, index) =>
+    parseYahooMatchupCsv(
+      readFileSync(filepath, "utf8"),
+      week.season,
+      index + 1,
+    )
+  ),
+  week,
+]);
+
+const power = powerHistory.at(-1)!;
+
+const approvedStories = source === "synthetic"
+  ? await loadApprovedYahooStoryHistory({
+      season: week.season,
+      beforeWeek: week.week,
+      source,
+    })
+  : await loadPublishedYahooStoryHistory({
+      leagueId: "league-of-extraordinary-men",
+      season: week.season,
+      beforeWeek: week.week,
+    });
+
+const continuity = buildYahooStoryCallback(
+  approvedStories,
+  powerHistory.at(-2)?.rankings ?? null,
+  power.rankings,
+  week.week,
+);
 
 const byId = new Map(
   week.teams.map((team) => [team.id, team]),
@@ -105,7 +184,7 @@ function recap(
     : "The category scoreboard is evenly split.";
 
   const outcome = leader
-    ? `${leader} holds the category lead.`
+    ? `The category edge goes to ${leader}.`
     : "Neither side has a category lead.";
 
   return (
@@ -132,17 +211,20 @@ const closest = byMargin.at(-1);
 const biggestLeader = biggest ? leaderName(biggest) : null;
 const closestLeader = closest ? leaderName(closest) : null;
 
-const top = ordered[0]!;
 const bottom = ordered.at(-1)!;
 
-const rankings = ordered.map((team) => {
-  const range = team.uncertain
-    ? ` [${team.minimum.toFixed(1)}-${team.maximum.toFixed(1)}]`
-    : "";
+const rankings = power.rankings.map((team) => {
+  const movement = team.movement === null
+    ? "NEW"
+    : team.movement > 0
+      ? `⬆️${team.movement}`
+      : team.movement < 0
+        ? `⬇️${Math.abs(team.movement)}`
+        : "➖";
 
   return (
-    `${team.rank}. ${team.name} — ` +
-    `${team.midpoint.toFixed(1)}/100${range}`
+    `${team.rank}. ${team.team} ${movement} — ` +
+    `${(team.powerScore * 100).toFixed(1)}/100`
   );
 });
 
@@ -171,8 +253,25 @@ if (
 
 awards.push(
   `🧊 *Rough Week:* ${bottom.name} — ` +
-  `${bottom.midpoint.toFixed(1)}/100 in weekly All-Play.`
+  `a difficult week across the box score.`
 );
+
+const riser = power?.rankings
+  .filter((team) => (team.movement ?? 0) > 0)
+  .sort((a, b) => b.movement! - a.movement!)[0];
+
+const faller = power?.rankings
+  .filter((team) => (team.movement ?? 0) < 0)
+  .sort((a, b) => a.movement! - b.movement!)[0];
+
+const movementStories = [
+  riser
+    ? `🚀 *The Climb:* ${riser.team} rose ${riser.movement} spots to #${riser.rank}.`
+    : null,
+  faller
+    ? `📉 *The Freefall:* ${faller.team} dropped ${Math.abs(faller.movement!)} spots to #${faller.rank}.`
+    : null,
+].filter((line): line is string => line !== null);
 
 const lines = [
   "🔒 *PRIVATE DRAFT — NOT APPROVED*",
@@ -183,59 +282,61 @@ const lines = [
   "🏀 *THE WEEKLY CHAOS REPORT*",
   `*LEAGUE OF EXTRAORDINARY MEN — WEEK ${week.week}*`,
   biggestLeader
-    ? `_${biggestLeader.toUpperCase()} MAKES A STATEMENT_`
+    ? `_${biggestLeader.toUpperCase()} IN THE SPOTLIGHT_`
     : "_THE LEAGUE REFUSES TO PICK A SIDE_",
   "",
-  `Six matchups, twelve teams, and another week of fantasy chaos. ` +
-  `${biggestLeader ?? "The league"} produced the widest category ` +
-  `margin, while ${top.name} leads the weekly All-Play table. ` +
-  "Those aren't necessarily the same achievement. " +
-  "All-Play compares every team against all eleven rivals, " +
-  "so a favorable matchup alone won't fool the numbers. " +
-  "Here are the receipts.",
+  `Six matchups, twelve teams, and a week of chaos. ` +
+  `The Power Rankings reflect sustained results and recent momentum. ` +
+  `Here are the biggest wins, surprises, and receipts.`,
   "",
   "⚔️ *MATCHUP MADNESS*",
   ...result.matchups.map(recap),
   "",
-  "📊 *PROVISIONAL WEEKLY ALL-PLAY*",
-  "_Category score /100 · Not multiweek Power Rankings_",
+  "📊 *PROVISIONAL POWER RANKINGS*",
+  "_Power Score /100 · movement from last week_",
   ...rankings,
   "",
   "🏆 *THE CHAOS AWARDS*",
   ...awards,
   "",
   "📰 *THE BIG PICTURE*",
-  `${top.name} sets the full-field pace at ` +
-  `${top.midpoint.toFixed(1)}/100, while ${bottom.name} ` +
-  `finishes this snapshot at ${bottom.midpoint.toFixed(1)}/100. ` +
-  "These scores measure this week's production, not " +
-  "roster potential or playoff positioning.",
+  continuity ??
+    (`The #1 Power Ranking belongs to ${power.rankings[0]!.team} at ` +
+    `${(power.rankings[0]!.powerScore * 100).toFixed(1)}/100, ` +
+    `while ${power.rankings.at(-1)!.team} faces the climb from #12. ` +
+    `The rest of the league has work to do. ` +
+    `Some teams are building momentum, while others are running ` +
+    `out of explanations. Every week brings new pressure.`),
+  ...movementStories,
   "",
   "🔮 *NEXT WEEK'S DRAMA*",
-  `Can ${top.name} repeat that performance? ` +
+  `Can ${power.rankings[0]!.team} defend the #1 ranking? ` +
   `Can ${bottom.name} answer the critics? ` +
   "One strong week can change the conversation. " +
   "Set those lineups, check the box scores, and keep the receipts. 🫡",
   "",
-  "⚠️ Rounded FG%/FT%; equal displayed values may be unresolved.",
+  "⚠️ Power Rankings are provisional until Yahoo data is fully verified.",
   source === "synthetic"
     ? "DEMO ONLY — Nothing sent to WhatsApp."
     : "PROVISIONAL — Not approved or sent to WhatsApp.",
 ];
 
 const report = lines.join("\n");
+assertWhatsAppEditorial(report);
 const words = countWords(report);
 
 console.log("\n========== YAHOO CHAOS PREVIEW ==========\n");
 console.log(report);
 console.log(`\n(${words} words)`);
 console.log("\n=========================================");
-if (save) {
+if (save || saveRevision) {
   const filepath = await saveYahooChaosDraft(
     report,
     week.season,
     week.week,
     source,
+    "data/private/reports",
+    saveRevision,
   );
 
   console.log(`Saved private draft: ${filepath}`);

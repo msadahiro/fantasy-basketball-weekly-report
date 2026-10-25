@@ -83,7 +83,10 @@ export async function approvePrivateDraft(
 
   const isProvisionalYahoo = content.includes(
     "PROVISIONAL YAHOO DISPLAY — NOT INDEPENDENTLY VERIFIED",
-  ) && content.includes("PROVISIONAL WEEKLY ALL-PLAY");
+  ) && (
+    content.includes("PROVISIONAL WEEKLY ALL-PLAY") ||
+    content.includes("PROVISIONAL POWER RANKINGS")
+  );
 
   if (
     !content.includes("PRIVATE DRAFT") ||

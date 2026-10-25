@@ -11,6 +11,7 @@ export async function saveYahooChaosDraft(
   week: number,
   source: YahooChaosSource,
   directory = "data/private/reports",
+  allowRevision = false,
 ): Promise<string> {
   if (
     !Number.isSafeInteger(season) ||
@@ -41,7 +42,8 @@ export async function saveYahooChaosDraft(
       !report.includes(
         "PROVISIONAL YAHOO DISPLAY — NOT INDEPENDENTLY VERIFIED"
       ) ||
-      !report.includes("PROVISIONAL WEEKLY ALL-PLAY") ||
+      (!report.includes("PROVISIONAL WEEKLY ALL-PLAY") &&
+        !report.includes("PROVISIONAL POWER RANKINGS")) ||
       report.includes("DEMO ONLY")
     ) {
       throw new Error("Real Yahoo report requires provisional Yahoo markers");
@@ -61,21 +63,39 @@ export async function saveYahooChaosDraft(
     mode: 0o700,
   });
 
-  const prefix =
-    source === "synthetic"
-      ? "demo-yahoo-chaos"
-      : "yahoo-provisional-chaos";
-
-  const filepath = path.join(
-    directory,
-    `${prefix}-season-${season}-week-${week}.txt`,
+  const hasPowerRankings = report.includes(
+    "PROVISIONAL POWER RANKINGS",
   );
 
-  // Never overwrite an existing draft or its approval history.
-  await writeFile(filepath, report, {
-    flag: "wx",
-    mode: 0o600,
-  });
+  const prefix = source === "synthetic"
+    ? hasPowerRankings
+      ? "demo-yahoo-power-chaos"
+      : "demo-yahoo-chaos"
+    : hasPowerRankings
+      ? "yahoo-provisional-power-chaos"
+      : "yahoo-provisional-chaos";
 
-  return filepath;
+  const basename = `${prefix}-season-${season}-week-${week}`;
+  let revision = 1;
+
+  while (true) {
+    const suffix = revision === 1 ? "" : `-v${revision}`;
+    const filepath = path.join(directory, `${basename}${suffix}.txt`);
+
+    try {
+      await writeFile(filepath, report, {
+        flag: "wx",
+        mode: 0o600,
+      });
+      return filepath;
+    } catch (error) {
+      if (
+        !allowRevision ||
+        (error as NodeJS.ErrnoException).code !== "EEXIST"
+      ) {
+        throw error;
+      }
+      revision++;
+    }
+  }
 }

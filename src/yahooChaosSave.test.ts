@@ -133,3 +133,72 @@ test("rejects missing provenance markers and invalid lengths", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("power ranking drafts have separate filenames and can be approved", async () => {
+  const directory = await mkdtemp(
+    path.join(tmpdir(), "yahoo-chaos-"),
+  );
+
+  try {
+    const powerReport = real.replace(
+      "PROVISIONAL WEEKLY ALL-PLAY",
+      "PROVISIONAL POWER RANKINGS",
+    );
+
+    const oldPath = await saveYahooChaosDraft(
+      real, 2026, 3, "real", directory,
+    );
+
+    const powerPath = await saveYahooChaosDraft(
+      powerReport, 2026, 3, "real", directory,
+    );
+
+    assert.notEqual(oldPath, powerPath);
+    assert.match(powerPath, /yahoo-provisional-power-chaos/);
+
+    await approvePrivateDraft(
+      powerPath,
+      hashDraft(powerReport),
+    );
+
+    assert.equal(
+      await getDraftApprovalStatus(powerPath),
+      "approved",
+    );
+
+    assert.equal(
+      await getDraftApprovalStatus(oldPath),
+      "unapproved",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("explicit revisions preserve the original draft", async () => {
+  const directory = await mkdtemp(
+    path.join(tmpdir(), "yahoo-chaos-"),
+  );
+
+  try {
+    const first = await saveYahooChaosDraft(
+      real, 2026, 3, "real", directory,
+    );
+
+    const revised = real.replace(
+      "word word word",
+      "updated word word",
+    );
+
+    const second = await saveYahooChaosDraft(
+      revised, 2026, 3, "real", directory, true,
+    );
+
+    assert.match(second, /-v2\.txt$/);
+    assert.equal(await readFile(first, "utf8"), real);
+    assert.equal(await readFile(second, "utf8"), revised);
+    assert.equal(await getDraftApprovalStatus(second), "unapproved");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
