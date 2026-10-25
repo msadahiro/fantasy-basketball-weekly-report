@@ -4,7 +4,7 @@
   "description": "An automated fantasy basketball analytics and reporting project for a private 12-team Yahoo Fantasy Basketball league, **League of Extraordinary Men**.",
   "main": "index.js",
   "scripts": {
-    "test": "tsx --test src/allPlay.test.ts",
+    "test": "tsx --test src/*.test.ts",
     "dev": "tsx src/index.ts"
   },
   "repository": {
