@@ -1,4 +1,4 @@
-import { calculateAllPlay, type TeamStats } from "./allPlay";
+import { calculateAllPlay, type TeamStats } from "./allPlay.js";
 
 export interface WeeklySnapshot {
   week: number;
@@ -23,10 +23,12 @@ export function calculatePowerRankings(weeks: WeeklySnapshot[]) {
     const results = calculateAllPlay(teams);
     const ids = new Set(results.map((team) => team.id));
 
+    const previousIds = expectedIds;
+
     if (
-      expectedIds &&
-      (ids.size !== expectedIds.size ||
-        [...ids].some((id) => !expectedIds.has(id)))
+      previousIds &&
+      (ids.size !== previousIds.size ||
+        [...ids].some((id) => !previousIds.has(id)))
     ) {
       throw new Error(`Team IDs changed in week ${week}`);
     }

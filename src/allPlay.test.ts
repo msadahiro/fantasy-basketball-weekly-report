@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateAllPlay, type TeamStats } from "./allPlay";
+import { calculateAllPlay, type TeamStats } from "./allPlay.js";
 
 const teams: TeamStats[] = [
   {

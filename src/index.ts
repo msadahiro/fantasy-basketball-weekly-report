@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
-import { calculateAllPlay, type TeamStats } from "./allPlay";
-import { calculatePowerRankings, type WeeklySnapshot } from "./powerRankings";
+import type { TeamStats } from "./allPlay.js";
+import type { WeeklySnapshot } from "./powerRankings.js";
+import { calculateRankingHistory } from "./history.js";
 
 interface DemoTeam {
   name: string;
@@ -46,49 +47,57 @@ const weeks: WeeklySnapshot[] = [1, 2, 3].map((week) => ({
   teams: makeTeams(week),
 }));
 
-// All-Play: latest week's performance.
-const latestAllPlay = calculateAllPlay(weeks[2]!.teams);
-
-// Power Rankings: all three weeks.
-const powerRankings = calculatePowerRankings(weeks);
-
-// Previous rankings: weeks one and two.
-const previousPower = calculatePowerRankings(weeks.slice(0, 2));
-
-const allPlayById = new Map(
-  latestAllPlay.map((team, index) => [
-    team.id,
-    { rank: index + 1, rate: team.categoryWinRate },
-  ]),
-);
-
-const previousRankById = new Map(
-  previousPower.map((team) => [team.id, team.rank]),
-);
+const history = calculateRankingHistory(weeks);
+const latest = history.at(-1)!;
 
 console.log("\n🏀 LEAGUE OF EXTRAORDINARY MEN");
-console.log("WEEK 3 — POWER RANKINGS");
+console.log(`WEEK ${latest.week} — POWER RANKINGS`);
 console.log("====================================\n");
 
-for (const team of powerRankings) {
-  const allPlay = allPlayById.get(team.id)!;
-  const previousRank = previousRankById.get(team.id)!;
-  const movement = previousRank - team.rank;
-
-  const arrow =
-    movement > 0
-      ? `↑${movement}`
-      : movement < 0
-        ? `↓${Math.abs(movement)}`
-        : "—";
+for (const team of latest.rankings) {
+  const movement =
+    team.movement === null
+      ? "NEW"
+      : team.movement > 0
+        ? `↑${team.movement}`
+        : team.movement < 0
+          ? `↓${Math.abs(team.movement)}`
+          : "—";
 
   console.log(
-    `${String(team.rank).padStart(2)}. ${team.team} ` +
+    `${String(team.powerRank).padStart(2)}. ${team.team} ` +
       `| Power ${(team.powerScore * 100).toFixed(1)}/100 ` +
-      `| All-Play #${allPlay.rank} ` +
-      `(${(allPlay.rate * 100).toFixed(1)}%) ` +
-      `| ${arrow}`,
+      `| All-Play #${team.allPlayRank} ` +
+      `| ${movement}`,
   );
 }
+
+const risers = latest.rankings.filter((team) => (team.movement ?? 0) > 0);
+
+const fallers = latest.rankings.filter((team) => (team.movement ?? 0) < 0);
+
+const maxRise = Math.max(0, ...risers.map((team) => team.movement!));
+
+const maxFall = Math.max(0, ...fallers.map((team) => -team.movement!));
+
+const biggestRisers = risers.filter((team) => team.movement === maxRise);
+
+const biggestFallers = fallers.filter((team) => team.movement === -maxFall);
+
+console.log("\n🏆 WEEKLY AWARDS");
+
+console.log(
+  "Biggest Riser:",
+  biggestRisers.length
+    ? biggestRisers.map((team) => `${team.team} (↑${maxRise})`).join(", ")
+    : "None",
+);
+
+console.log(
+  "Biggest Fall:",
+  biggestFallers.length
+    ? biggestFallers.map((team) => `${team.team} (↓${maxFall})`).join(", ")
+    : "None",
+);
 
 console.log("\nDEMO ONLY — All statistics are synthetic.");

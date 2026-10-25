@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateAllPlay, type TeamStats } from "./allPlay";
-import { calculatePowerRankings } from "./powerRankings";
+import { calculateAllPlay, type TeamStats } from "./allPlay.js";
+import { calculatePowerRankings } from "./powerRankings.js";
 
 function team(id: string, name: string, strong: boolean): TeamStats {
   return {
