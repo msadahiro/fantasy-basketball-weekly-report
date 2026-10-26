@@ -116,44 +116,44 @@ test("synthetic Yahoo Chaos CLI preserves facts with mocked AI", (t) => {
       {
         headline: "Team 1 Holds the Door Against Team 12",
         paragraph:
-          "Team 1 holds a slim category edge over Team 12, whose " +
-          "imaginary crisis committee is already requesting another " +
-          "review of the numbers before anyone celebrates.",
+          "Team 1 is barely ahead of Team 12, yet the confidence gap " +
+          "feels enormous. Somebody has already ordered a parade float " +
+          "on credit.",
       },
       {
         headline: "Team 2 and Team 11 Invent Gridlock",
         paragraph:
-          "Team 2 and Team 11 are currently level across category " +
-          "wins and losses, with one tied category making the " +
-          "scoreboard resemble a stalled negotiation.",
+          "Team 2 and Team 11 have constructed a stalemate so elaborate " +
+          "that both sides are claiming progress. Absolutely nobody has " +
+          "offered evidence of movement.",
       },
       {
         headline: "Team 10 Brings a Bulldozer to Team 3",
         paragraph:
-          "Team 10 leads Team 3 in nearly every category. The " +
-          "imaginary press office is struggling to explain why " +
-          "the scoreboard resembles a poorly negotiated surrender.",
+          "Team 10 has Team 3 staring at a very large hill. The " +
+          "motivational speech is ready; unfortunately, nobody " +
+          "remembered to provide the climbing equipment.",
       },
       {
         headline: "Team 9 Opens a Comfortable Gap on Team 4",
         paragraph:
-          "Team 9 has the stronger category position against " +
-          "Team 4, although the newsroom is refusing to print " +
-          "victory banners while the numbers remain provisional.",
+          "Team 9 seems comfortably ahead of Team 4, who is treating " +
+          "the situation like a bad restaurant review: ignore it, " +
+          "complain privately, and hope nobody notices.",
       },
       {
         headline: "Team 8 Turns Up the Heat on Team 5",
         paragraph:
-          "Team 8 is ahead of Team 5 in most categories, a " +
-          "development the fictional committee on competitive " +
-          "balance has described as deeply inconvenient.",
+          "Team 8 has Team 5 practicing the thousand-yard stare. The " +
+          "explanation is patience, which sounds suspiciously like " +
+          "waiting for somebody else's luck to run out.",
       },
       {
         headline: "Team 6 Makes Team 7 Answer Difficult Questions",
         paragraph:
-          "Team 6 holds more category leads than Team 7, and " +
-          "the imaginary analysts are already rehearsing questions " +
-          "nobody wants to answer before the week ends.",
+          "Team 6 keeps smiling at Team 7 like this is a friendly " +
+          "neighborhood gathering. Team 7 has quietly started looking " +
+          "for the nearest emergency exit.",
       },
     ];
 

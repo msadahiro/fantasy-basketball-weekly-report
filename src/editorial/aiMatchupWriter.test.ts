@@ -24,7 +24,7 @@ const comments = [
   "Management remains upbeat, a remarkable achievement given the surrounding scoreboard situation.",
   "The arena imagined a parade; the numbers quietly requested a recount.",
   "Optimism took the floor, immediately discovering a formidable opponent in arithmetic.",
-  "The press office promised fireworks; the category totals delivered a damp sparkler.",
+  "The grand parade was canceled because someone forgot to invite reality.",
   "This franchise has a complicated relationship with momentum and an excellent publicist.",
 ];
 
@@ -32,8 +32,8 @@ const stories = comments.map((comment, index) => ({
   matchup: index + 1,
   headline: `Team ${index * 2 + 1} Challenges Team ${index * 2 + 2}`,
   paragraph:
-    `Team ${index * 2 + 1} currently leads ` +
-    `Team ${index * 2 + 2} across more categories. ${comment}`,
+    `Team ${index * 2 + 1} showed up confident. ` +
+    `Team ${index * 2 + 2} looked unconvinced. ${comment}`,
 }));
 
 const report = [
@@ -147,7 +147,7 @@ test("rejects unsupported claims and duplicate headlines", async () => {
       {
         ...stories[0]!,
         paragraph:
-          "Team 1 currently leads Team 2 across more categories. " +
+          "Team 1 showed up confident. Team 2 looked unconvinced. " +
           badComment,
       },
       ...stories.slice(1),

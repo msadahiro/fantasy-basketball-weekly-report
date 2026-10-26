@@ -1,3 +1,4 @@
+import { assertNoCategoryRecap } from "./matchupStoryVoice.js";
 import {
   assignEditorialStyles,
   STYLE_GUIDANCE,
@@ -285,6 +286,8 @@ export async function rewriteMatchupCommentary(
     if (/\d/.test(withoutTeamNames)) {
       throw new Error("AI matchup story failed validation");
     }
+
+    assertNoCategoryRecap(withoutTeamNames);
 
     stories.push({
       headline: title,
