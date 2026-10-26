@@ -16,6 +16,7 @@ import { calculateDisplayedAllPlay } from "../rankings/yahooDisplayedAllPlay.js"
 import { loadMatchupPairings } from "../data/matchupPairings.js";
 import { countWords } from "../reports/weeklyShow.js";
 import { saveYahooChaosDraft } from "../reports/yahooChaosSave.js";
+import { formatYahooRankingDisplay } from "../reports/yahooChaosRankingDisplay.js";
 import { calculateYahooRankingHistory } from "../rankings/yahooPowerRankings.js";
 import { assertWhatsAppEditorial, assertAIReportWordCount } from "../editorial/yahooChaosEditorial.js";
 import { loadApprovedYahooStoryHistory } from "../editorial/yahooStoryHistory.js";
@@ -42,6 +43,7 @@ let saveRevision = false;
 let ai = false;
 let previousPaths: string[] | null = null;
 let periodsPath: string | null = null;
+let manualProvisional = false;
 let exportEditorialPath: string | null = null;
 let importEditorialPath: string | null = null;
 let draftDirectory: string | null = null;
@@ -95,6 +97,11 @@ for (let i = 0; i < options.length; i++) {
     }
 
     draftDirectory = value;
+  } else if (options[i] === "--manual-provisional") {
+    if (manualProvisional) {
+      throw new Error("Duplicate --manual-provisional");
+    }
+    manualProvisional = true;
   } else if (options[i] === "--periods") {
     if (periodsPath !== null) {
       throw new Error("Duplicate --periods");
@@ -143,7 +150,7 @@ if (
   throw new Error(
     "Usage: npx tsx src/cli/previewYahooChaos.ts " +
     "<yahoo.csv> <pairings.json> synthetic|real " +
-    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision] [--ai] [--export-editorial path.json] [--import-editorial response.json] [--draft-dir directory]"
+    "[--previous w1.csv,w2.csv] [--periods manifest.json] [--save|--save-revision] [--ai] [--export-editorial path.json] [--import-editorial response.json] [--draft-dir directory] [--manual-provisional]"
   );
 }
 
@@ -162,6 +169,21 @@ if (
   !saveRevision
 ) {
   throw new Error("--draft-dir requires --save or --save-revision");
+}
+
+if (
+  manualProvisional &&
+  (
+    source !== "real" ||
+    periodsPath !== null ||
+    ai ||
+    (exportEditorialPath === null && importEditorialPath === null)
+  )
+) {
+  throw new Error(
+    "--manual-provisional requires real editorial export/import, " +
+    "without --periods or --ai"
+  );
 }
 
 const editorialMode = ai || importEditorialPath !== null;
@@ -186,21 +208,23 @@ if (previousFiles.length !== week.week - 1) {
 }
 
 if (source === "real") {
-  if (!periodsPath) {
-    throw new Error(
-      "Real Yahoo reports require --periods with verified final results",
+  if (!manualProvisional) {
+    if (!periodsPath) {
+      throw new Error(
+        "Real Yahoo reports require --periods with verified final results",
+      );
+    }
+
+    const manifest: unknown = JSON.parse(
+      readFileSync(periodsPath, "utf8"),
     );
+
+    assertReadyYahooPeriodManifest(manifest, {
+      leagueId: league.id,
+      season: week.season,
+      week: week.week,
+    });
   }
-
-  const manifest: unknown = JSON.parse(
-    readFileSync(periodsPath, "utf8"),
-  );
-
-  assertReadyYahooPeriodManifest(manifest, {
-    leagueId: league.id,
-    season: week.season,
-    week: week.week,
-  });
 } else if (periodsPath !== null) {
   throw new Error(
     "--periods is only used for real Yahoo reports",
@@ -376,28 +400,16 @@ const closestLeader = closest ? leaderName(closest) : null;
 
 const bottom = ordered.at(-1)!;
 
-const rankings = power.rankings.map((team) => {
-  const movement = team.movement === null
-    ? "NEW"
-    : team.movement > 0
-      ? `⬆️${team.movement}`
-      : team.movement < 0
-        ? `⬇️${Math.abs(team.movement)}`
-        : "➖";
-
-  return (
-    `${team.rank}. ${team.team} ${movement} — ` +
-    `${(team.powerScore * 100).toFixed(1)}/100`
-  );
-});
+const rankings = power.rankings.map((team) =>
+  formatYahooRankingDisplay(team, week.week, source)
+);
 
 const awards: string[] = [];
 
 if (biggest && biggestLeader) {
   awards.push(
     `🧹 *Steamroller:* ${biggestLeader} — ` +
-    `${Math.max(biggest.homeWins, biggest.awayWins)} ` +
-    "category leads in the widest matchup."
+    "That felt personal."
   );
 }
 
@@ -409,15 +421,13 @@ if (
 ) {
   awards.push(
     `🎩 *Escape Artist:* ${closestLeader} — ` +
-    `${Math.max(closest.homeWins, closest.awayWins)}-` +
-    `${Math.min(closest.homeWins, closest.awayWins)} ` +
-    "in the closest decided matchup."
+    "Pretending that was the plan all along."
   );
 }
 
 awards.push(
   `🧊 *Rough Week:* ${bottom.name} — ` +
-  `a difficult week across the box score.`
+  "The app has an uninstall button."
 );
 
 const riser = power?.rankings
@@ -485,17 +495,19 @@ const lines = [
     ? "Six matchups. Twelve teams. Countless receipts."
     : "Six matchups, twelve teams, and a week of chaos. " +
       "The Power Rankings reflect sustained results and recent momentum. " +
-      "Here are the biggest wins, surprises, and receipts.",
+      "Here are the biggest wins, surprises, and receipts. " +
+      "Power Rankings compare teams across the league, " +
+      "not just their scheduled opponent.",
   "",
   "⚔️ *MATCHUP MADNESS*",
   ...result.matchups.map(editorialRecap),
   "",
   "📊 *PROVISIONAL POWER RANKINGS*",
   source === "real" && week.week === 1
-    ? "_Power Score /100 · movement vs preseason_"
+    ? "_Previous position: preseason ranking_"
     : week.week === 1
-      ? "_Power Score /100 · first-week baseline_"
-      : "_Power Score /100 · movement from last week_",
+      ? "_First-week baseline_"
+      : "_Previous position: last week's ranking_",
   ...rankings,
   "",
   "🏆 *THE CHAOS AWARDS*",
@@ -504,13 +516,14 @@ const lines = [
   "📰 *THE BIG PICTURE*",
   continuity ??
   preseasonRecap ??
-    (`The #1 Power Ranking belongs to ${power.rankings[0]!.team} at ` +
-    `${(power.rankings[0]!.powerScore * 100).toFixed(1)}/100, ` +
+    (`The #1 Power Ranking belongs to ${power.rankings[0]!.team}, ` +
     `while ${power.rankings.at(-1)!.team} faces the climb from #12. ` +
     `The rest of the league has work to do. ` +
     `Some teams are building momentum, while others are running ` +
     `out of explanations. Every week brings new pressure.`),
-  ...movementStories,
+  ...(manualProvisional && editorialMode && week.week === 1
+    ? []
+    : movementStories),
   "",
   "🔮 *NEXT WEEK'S DRAMA*",
   `Can ${power.rankings[0]!.team} defend the #1 ranking? ` +
@@ -535,6 +548,13 @@ const factsHash = createHash("sha256")
     season: week.season,
     week: week.week,
     source,
+    ...(source === "real"
+      ? {
+          verificationMode: manualProvisional
+            ? "manual-provisional"
+            : "periods-validated",
+        }
+      : {}),
     teams: week.teams.map((team) => ({
       id: team.id,
       name: team.name,
@@ -571,7 +591,9 @@ if (exportEditorialPath !== null) {
     season: week.season,
     week: week.week,
     source,
-    status: "PRIVATE DRAFT - PROVISIONAL",
+    status: manualProvisional
+      ? "PRIVATE DRAFT - MANUAL SCREENSHOTS - NOT VERIFIED"
+      : "PRIVATE DRAFT - PROVISIONAL",
     factsHash,
     teams: week.teams.map((team) => ({
       id: team.id,

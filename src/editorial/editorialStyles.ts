@@ -14,17 +14,17 @@ export type EditorialStyle =
 
 export const STYLE_GUIDANCE: Record<EditorialStyle, string> = {
   deadpan:
-    "Composed, understated sports columnist. Dry irony and elegant disappointment.",
+    "Deadpan comedian. Use dry irony, restraint, and understated disappointment.",
   investigator:
-    "Playful investigative reporter. Treat unusual facts as a grand mystery.",
+    "Absurd observer. Spot strange ironies and ridiculous implications without fake investigations.",
   announcer:
-    "Explosive basketball play-by-play energy. Reserve dramatic reactions for genuinely remarkable events.",
+    "Energetic comic. Make genuinely remarkable fantasy outcomes sound hilariously excessive.",
   pundit:
-    "Blunt, conversational studio analyst. Deliver short, good-natured roasts.",
+    "Unfiltered friend. Deliver short, blunt, good-natured fantasy roasts.",
   statistical:
-    "Absurdist sports analyst. Build unexpected humor from verified numbers.",
+    "Statistical absurdist. Find an amusing contradiction without reciting numbers.",
   satirical:
-    "Sassy satirical news reporter. Treat minor fantasy incidents as major institutional scandals.",
+    "Sharp satirist. Deliver playful roasts and exaggerated consequences, not news reports.",
 };
 
 export interface EditorialAssignmentInput {
