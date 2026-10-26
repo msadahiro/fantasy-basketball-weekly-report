@@ -26,3 +26,15 @@ export function assertAIReportWordCount(words: number): void {
     );
   }
 }
+
+// Validate an already-published WhatsApp article.
+// This does not grant approval or publication permission.
+export function assertPublishedWhatsAppEditorial(report: string): void {
+  if (/\ball[\s-]?play\b/i.test(report)) {
+    throw new Error("Published reports must not mention All-Play");
+  }
+
+  if (!/^📊 \*(?:PROVISIONAL )?POWER RANKINGS\*$/m.test(report)) {
+    throw new Error("Published report is missing Power Rankings");
+  }
+}

@@ -5,7 +5,10 @@ import {
   getDraftApprovalStatus,
   hashDraft,
 } from "../publication/draftApproval.js";
-import { assertWhatsAppEditorial } from "./yahooChaosEditorial.js";
+import {
+  assertWhatsAppEditorial,
+  assertPublishedWhatsAppEditorial,
+} from "./yahooChaosEditorial.js";
 import type { YahooChaosSource } from "../reports/yahooChaosSave.js";
 
 export interface ApprovedYahooStory {
@@ -44,8 +47,12 @@ function sectionLines(
 
   for (let i = index + 1; i < lines.length; i++) {
     const line = lines[i]!.trim();
-    if (!line) break;
-    result.push(line);
+
+    if (/^(?:⚔️|📊|🏆|📰|🔮) \*/u.test(line)) {
+      break;
+    }
+
+    if (line) result.push(line);
   }
 
   return result;
@@ -65,7 +72,10 @@ function readStory(
 
   const correctSource = published
     ? source === "real" &&
-      article.startsWith("🏀 *THE WEEKLY CHAOS REPORT*") &&
+      (
+        article.startsWith("🏀 *THE WEEKLY CHAOS REPORT*") ||
+        article.startsWith("🏀 *WEEKLY POWER RANKINGS*")
+      ) &&
       !article.includes("PRIVATE DRAFT") &&
       !article.includes("DEMO ONLY")
     : source === "synthetic"
@@ -79,7 +89,11 @@ function readStory(
     throw new Error(`Report source mismatch: ${filepath}`);
   }
 
-  assertWhatsAppEditorial(article);
+  if (published) {
+    assertPublishedWhatsAppEditorial(article);
+  } else {
+    assertWhatsAppEditorial(article);
+  }
 
   const weekHeader = article.match(
     /^\*.*\bWEEK ([1-9]\d*)\*$/m,
@@ -89,13 +103,57 @@ function readStory(
     throw new Error(`Report week mismatch: ${filepath}`);
   }
 
-  const headline = article.split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => /^_[^_]+_$/.test(line));
+  const lines = article.split(/\r?\n/)
+    .map((line) => line.trim());
+
+  const weekHeaderIndex = lines.findIndex(
+    (line) => /^\*.*\bWEEK ([1-9]\d*)\*$/u.test(line),
+  );
+
+  const remaining = lines.slice(weekHeaderIndex + 1);
+  const firstSectionIndex = remaining.findIndex(
+    (line) => /^(?:⚔️|📊|🏆|📰|🔮) \*/u.test(line),
+  );
+
+  const introLines = firstSectionIndex < 0
+    ? remaining
+    : remaining.slice(0, firstSectionIndex);
+
+  const publishedHeadline = published
+    ? introLines.find((line) => /^\*[^*]+\*/u.test(line))
+    : undefined;
+
+  const legacyHeadline = lines.find(
+    (line) => /^_[^_]+_$/.test(line),
+  );
+
+  const headline = publishedHeadline
+    ? publishedHeadline.replace(/^\*([^*]+)\*(.*)$/u, "$1$2").trim()
+    : legacyHeadline
+      ? legacyHeadline.slice(1, -1)
+      : null;
+
+  const matchupStories: string[] = [];
+
+  if (published) {
+    for (const line of sectionLines(
+      article,
+      "⚔️ *MATCHUP MADNESS*",
+    )) {
+      if (line.startsWith("• ")) {
+        matchupStories.push(line);
+      } else if (matchupStories.length > 0) {
+        const last = matchupStories.length - 1;
+        matchupStories[last] += `\n${line}`;
+      }
+    }
+  }
 
   const rankings = sectionLines(
     article,
-    "📊 *PROVISIONAL POWER RANKINGS*",
+    published && article.includes("📊 *POWER RANKINGS*")
+      ? "📊 *POWER RANKINGS*"
+      : "📊 *PROVISIONAL POWER RANKINGS*",
   ).filter((line) => /^\d+\.\s/.test(line));
 
   if (rankings.length !== 12) {
@@ -110,16 +168,19 @@ function readStory(
     source,
     filepath,
     sha256: hashDraft(article),
-    headline: headline ? headline.slice(1, -1) : null,
+    headline,
     rankings,
     awards: sectionLines(
       article,
       "🏆 *THE CHAOS AWARDS*",
     ),
-    storylines: sectionLines(
-      article,
-      "📰 *THE BIG PICTURE*",
-    ),
+    storylines: [
+      ...matchupStories,
+      ...sectionLines(
+        article,
+        "📰 *THE BIG PICTURE*",
+      ),
+    ],
     nextWeekTeaser: sectionLines(
       article,
       "🔮 *NEXT WEEK'S DRAMA*",

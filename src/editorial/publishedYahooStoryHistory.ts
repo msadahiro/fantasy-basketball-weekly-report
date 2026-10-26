@@ -1,3 +1,4 @@
+import { loadManualYahooPublications } from "../publication/manualYahooPublication.js";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -16,6 +17,7 @@ export interface PublishedStoryRequest {
   season: number;
   beforeWeek: number;
   directory?: string;
+  manualDirectory?: string;
 }
 
 export async function loadPublishedYahooStoryHistory(
@@ -44,9 +46,10 @@ export async function loadPublishedYahooStoryHistory(
     filenames = await readdir(directory);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
+      filenames = [];
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   const selected = new Map<
@@ -145,6 +148,36 @@ export async function loadPublishedYahooStoryHistory(
       draftHash: verified.draftHash,
       story,
     });
+  }
+
+  const manualDirectory = request.manualDirectory ??
+    (directory === "data/private/publications"
+      ? "data/private/manual-publications/receipts"
+      : path.join(directory, "manual-receipts"));
+
+  const manual = await loadManualYahooPublications({
+    leagueId,
+    season,
+    beforeWeek,
+    directory: manualDirectory,
+  });
+
+  for (const { receipt, story } of manual) {
+    const existing = selected.get(story.week);
+
+    if (existing && existing.story.sha256 !== story.sha256) {
+      throw new Error(
+        `Conflicting published articles for ${leagueId}, ` +
+        `season ${season}, week ${story.week}`,
+      );
+    }
+
+    if (!existing) {
+      selected.set(story.week, {
+        draftHash: receipt.articleSha256,
+        story,
+      });
+    }
   }
 
   return [...selected.entries()]
